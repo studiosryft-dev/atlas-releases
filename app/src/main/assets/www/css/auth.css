@@ -1,0 +1,90 @@
+.auth-screen {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 28px;
+}
+.auth-title { font-size: 26px; margin-bottom: 8px; }
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--glass-edge);
+  border-top-color: var(--ice);
+  animation: spin 800ms linear infinite;
+}
+.auth-sub { font-size: 14px; color: var(--ink-dim); margin: 0 0 26px; line-height: 1.4; }
+.auth-card { padding: 20px; }
+.field { margin-bottom: 14px; }
+.field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.field input {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: var(--glass-radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px var(--glass-edge-soft);
+  color: var(--ink);
+  font-size: 15px;
+  outline: none;
+  /* The native blinking text caret defaults to the input's own `color` (near-white here) and
+     blinks with a hard instant on/off — that read as "a white stroke" flickering on focus. Fixed
+     by animating `caret-color` itself (a real CSS-animatable color property) between the app's
+     accent tone and transparent, so the browser draws + positions the caret exactly like it
+     always does (100% accurate against every character, selection, scroll, RTL, etc.) while the
+     color still fades smoothly instead of hard-blinking. Replaces the earlier approach — a
+     separate absolutely-positioned span whose left offset was computed by measuring text width
+     in a hidden mirror element — which was fragile (font-shorthand/offsetParent/scroll edge
+     cases) and read as "finicky" positioning that drifted from the real text. */
+  caret-color: var(--ice);
+  transition: box-shadow var(--dur-fast);
+}
+.field input:focus { box-shadow: inset 0 0 0 1.5px var(--ice); animation: caretFade 1.1s ease-in-out infinite; }
+.field input::placeholder { color: var(--ink-mute); }
+
+@keyframes caretFade {
+  0%, 100% { caret-color: var(--ice); }
+  50% { caret-color: transparent; }
+}
+.auth-error {
+  font-size: 13px;
+  color: var(--danger);
+  margin-top: 4px;
+}
+
+/* Password show/hide eye toggle — absolutely positioned inside the field, morphs eye-with-slash
+   <-> plain eye via the shared .icon-morph-btn pattern (components.css — same technique as Now
+   Playing's 3-dot->X menu button). */
+.password-field-wrap { position: relative; }
+.password-field-wrap input { padding-right: 44px; }
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  color: var(--ink-mute);
+}
+
+/* Sign in / Create account / Unlock buttons while a request is in flight — spinner replaces the
+   label so pressing the button visibly *does something* instead of appearing to do nothing until
+   the network call resolves. */
+.btn-primary.is-loading { pointer-events: none; opacity: 0.85; }
+.btn-spinner {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: var(--ink);
+  animation: spin 700ms linear infinite;
+}

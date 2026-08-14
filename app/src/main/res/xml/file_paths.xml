@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exposes only filesDir/updates/ (where UpdateDownloader saves the APK) to the FileProvider —
+     deliberately scoped to that one subfolder rather than all of files-path, matching the
+     principle of least exposure for a provider that hands a Uri to another app (the system
+     package installer). -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path name="updates" path="updates/" />
+</paths>

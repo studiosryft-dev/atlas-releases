@@ -1,0 +1,214 @@
+#shell-root, #auth-root {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* ---------------- global header ---------------- */
+/* Its own floating liquid-glass widget, same inset/floating treatment as the bottom nav and
+   mini player. Taller, two-row layout: a slim title+utility-icons row on top, then the 3 main
+   nav tiles (Discover/Queue/Downloads) below as equal-width icon-over-label tiles that fill
+   the remaining header height — sleeker than the old single-row cram of 5 mixed buttons. */
+#global-header {
+  position: absolute;
+  top: calc(var(--safe-top) + 10px);
+  left: 12px;
+  right: 12px;
+  height: var(--header-height);
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px 8px;
+  z-index: 20;
+}
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+#global-header .page-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+}
+.header-utility-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.header-utility-icons .icon-btn {
+  width: 32px;
+  height: 32px;
+  color: var(--ink-mute);
+}
+#global-header .header-stats {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+}
+.header-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: var(--glass-radius-sm);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  transition: transform var(--dur-fast) var(--ease-swift), color var(--dur-fast), background var(--dur-fast);
+}
+.header-nav-btn:active { transform: scale(0.94); background: rgba(255, 255, 255, 0.04); }
+.header-nav-btn svg { width: 17px; height: 17px; }
+
+.header-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 8px;
+  height: 8px;
+  border-radius: 5px;
+  background: var(--accent-a);
+  box-shadow: 0 0 0 2px var(--deep);
+}
+
+/* ---------------- page viewport ---------------- */
+#page-container {
+  position: absolute;
+  top: calc(var(--safe-top) + 10px + var(--header-height) + 10px);
+  left: 0;
+  right: 0;
+  bottom: calc(var(--safe-bottom) + var(--nav-height));
+  overflow: hidden;
+}
+#page-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.page-slide {
+  padding: 12px 16px 16px;
+  overflow-y: auto;
+  height: 100%;
+}
+.page-slide::-webkit-scrollbar { display: none; }
+
+/* ---------------- bottom nav ---------------- */
+#bottom-nav {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--safe-bottom) + 10px);
+  height: var(--nav-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 20;
+  padding: 0 6px;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  height: 100%;
+  justify-content: center;
+  color: var(--ink-mute);
+  transition: color var(--dur-medium) var(--ease-standard), transform var(--dur-fast) var(--ease-swift);
+}
+.nav-item:active { transform: scale(0.9); }
+.nav-item svg { width: 22px; height: 22px; transition: filter var(--dur-medium); }
+.nav-item .nav-label { font-size: 10px; font-weight: 600; }
+/* Colorway-driven (--bg-1, the active colorway's own accent — see backgrounds.css) instead of a
+   fixed --ice, so the selected tab always reads in whichever theme color is active rather than a
+   baby-blue that clashed with warm/violet colorways. */
+.nav-item.is-active { color: var(--bg-1); }
+.nav-item.is-active svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--bg-1) 65%, transparent)); }
+
+/* Sliding indicator behind the active nav item — position/width computed in JS from the active
+   item's own bounding rect (see renderNav in app.js), so it stays correct across any number/
+   width of nav items without a hardcoded fraction. Sits behind the items (z-index:0) as a soft
+   glow rather than a solid fill. */
+.nav-pill {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  z-index: 0;
+  /* Matches #bottom-nav's own .glass rounding (var(--glass-radius-md)) instead of a fully
+     pill-round shape — was noticeably rounder than the bar it sits inside of. */
+  border-radius: calc(var(--glass-radius-md) - 4px);
+  /* --bg-1 is the active colorway's own accent color (see backgrounds.css's per-colorway
+     [data-colorway] blocks) rather than the fixed --ice used everywhere else, so the pill
+     actually reflects whichever theme/colorway is selected — and fades between colors on
+     change since background-color/border-color/box-shadow-color are all listed below. */
+  background: var(--bg-1);
+  opacity: 0.16;
+  border: 1px solid var(--bg-1);
+  box-shadow: 0 0 18px 1px var(--bg-1);
+  transition: left var(--dur-medium) var(--ease-standard), width var(--dur-medium) var(--ease-standard),
+    background-color var(--dur-slow) var(--ease-standard), border-color var(--dur-slow) var(--ease-standard),
+    box-shadow var(--dur-slow) var(--ease-standard);
+  pointer-events: none;
+}
+.nav-item { position: relative; z-index: 1; }
+
+/* ---------------- mini player ---------------- */
+#mini-player {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--safe-bottom) + var(--nav-height) + 18px);
+  z-index: 19;
+  display: none;
+}
+#mini-player.is-visible { display: block; animation: fadeSlideUp var(--dur-medium) var(--ease-standard); }
+
+/* ---------------- indexed pages (Discover / Queue / Download Queue / Now Playing / etc) ---------------- */
+#indexed-pages { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
+.indexed-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  /* Bottom-based on purpose, both directions: opens by sliding up from the bottom, closes by
+     sliding back down — matches the swipe-down-to-dismiss gesture's own direction (see
+     app.js's attachIndexedPageSwipeDismiss). Previously this was top-based (-100%) while the
+     swipe gesture animated to +100%; closing after a swipe-dismiss cleared the inline override
+     back to this class's -100% default, and since both states carry the same transition, that
+     mismatch animated a second, unwanted sweep from +100% back up through the visible area to
+     -100%. Same direction everywhere fixes that outright, not just the gesture case. */
+  transform: translateY(100%);
+  transition: transform var(--dur-slow) var(--ease-standard);
+  pointer-events: none;
+  /* The page element itself stays transparent — its own opacity comes from a child. Either
+     `.indexed-page__bg` (a mounted wave instance, js/wavesBg.js — every indexed page except Now
+     Playing/Lyrics) or, for those two, the flat var(--deep) below. An indexed page owning a real
+     opaque layer of its own is what actually keeps whatever sits behind it at the shell level
+     (native page content, header, nav, mini player) from ever bleeding through, regardless of
+     what that content is — no transparency chain to reason about. */
+  background: transparent;
+}
+.indexed-page[data-page="nowPlaying"], .indexed-page[data-page="lyrics"] { background: var(--deep); }
+.indexed-page__bg { z-index: 0; }
+.indexed-page.is-open {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.indexed-page__content {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  overflow-y: auto;
+  padding: calc(var(--safe-top) + 16px) 16px calc(var(--safe-bottom) + 16px);
+}
+.indexed-page__mini-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}

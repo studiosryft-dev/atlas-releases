@@ -1,0 +1,265 @@
+/* ============================================================
+   Now Playing + Lyrics — share one Indexed Page, sliding
+   horizontally between the two panels inside .np-slider.
+   ============================================================ */
+/* Registered as a typed <color> (same trick backgrounds.css uses for --bg-1/2/3) so setting it
+   via inline style — see js/albumColor.js + nowPlaying.js's applyBg — crossfades smoothly on a
+   track change instead of snapping, and everything below that reads it (seek bar, repeat
+   buttons) rides that same transition for free. */
+@property --np-accent { syntax: '<color>'; inherits: true; initial-value: #8b5cf6; }
+.np-shell {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  --np-accent: #8b5cf6;
+  transition: --np-accent 700ms var(--ease-standard);
+}
+.np-bg {
+  position: absolute;
+  inset: -30px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(40px) saturate(130%) brightness(0.55);
+  transform: scale(1.15);
+  transition: background-image var(--dur-slow) var(--ease-standard);
+}
+.np-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 4, 15, 0.35);
+}
+.np-slider {
+  position: relative;
+  display: flex;
+  width: 200%;
+  height: 100%;
+  transition: transform var(--dur-slow) var(--ease-standard);
+}
+.np-panel {
+  width: 50%;
+  height: 100%;
+  overflow-y: auto;
+  padding: calc(var(--safe-top) + 12px) 18px calc(var(--safe-bottom) + 18px);
+  display: flex;
+  flex-direction: column;
+}
+
+.np-topbar { display: flex; align-items: center; }
+
+/* Real audio-reactive visualizer (js/screens/nowPlaying.js + native VisualizerController.kt) —
+   spans the space between the close button and the 3-dot menu. Bars are scaled via `transform`
+   (GPU-composited, no layout thrash) and tinted from --np-accent so they track the current
+   album art's color the same way the seek bar does. */
+.np-visualizer {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2.5px;
+  height: 26px;
+  margin: 0 12px;
+}
+.np-vis-bar {
+  flex: 1;
+  max-width: 5px;
+  height: 100%;
+  border-radius: 2px 2px 0 0;
+  background: var(--np-accent);
+  opacity: 0.85;
+  transform-origin: bottom center;
+  transform: scaleY(0.05);
+}
+
+.np-menu-wrap { position: relative; }
+.np-dropdown {
+  position: absolute;
+  top: 42px;
+  right: 0;
+  z-index: 40;
+  min-width: 200px;
+  padding: 8px;
+  animation: fadeSlideDown var(--dur-fast) var(--ease-standard);
+  transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+}
+.np-dropdown.is-closing { opacity: 0; transform: translateY(-8px); }
+.np-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 10px;
+  border-radius: var(--glass-radius-sm);
+  font-size: 13px;
+  color: var(--ink);
+}
+.np-dropdown__item:active { background: rgba(255, 255, 255, 0.08); }
+.np-dropdown__item.is-danger { color: var(--danger); }
+
+.np-art-wrap {
+  position: relative;
+  margin: 18px 0;
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+.np-art {
+  aspect-ratio: 1;
+  border: none; /* .glass's own border — decorative stroke around the art, not wanted here */
+}
+.np-art img { width: 100%; height: 100%; object-fit: cover; }
+
+.np-title-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.np-title { font-size: 21px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-artist { color: var(--ink-dim); margin-top: 3px; font-size: 14px; }
+.np-like { flex-shrink: 0; transition: transform var(--dur-fast) var(--ease-standard); color: var(--ink-dim); }
+.np-like.is-liked { color: var(--danger); }
+.np-like.is-pulsing { animation: npLikePulse 380ms var(--ease-standard); }
+@keyframes npLikePulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+.np-seek { padding: 16px 0 6px; touch-action: none; }
+.np-seek__track {
+  position: relative;
+  height: 5px;
+  border-radius: var(--glass-radius-pill);
+  background: rgba(255, 255, 255, 0.14);
+}
+.np-seek__fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  border-radius: var(--glass-radius-pill);
+  /* Derived from the current album art (see js/albumColor.js) rather than a fixed gradient —
+     --np-accent's own transition (above) is what makes this crossfade smoothly on track change. */
+  background: linear-gradient(90deg, color-mix(in srgb, var(--np-accent) 65%, black), var(--np-accent));
+  transition: width 240ms linear;
+}
+.np-seek.is-dragging .np-seek__fill { transition: none; }
+.np-seek__handle {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--np-accent) 35%, white);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -50%);
+  transition: left 240ms linear;
+}
+.np-seek.is-dragging .np-seek__handle { transition: none; }
+
+.np-time-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+.np-quality { display: flex; align-items: center; gap: 5px; font-weight: 700; letter-spacing: 0.02em; }
+
+.np-transport {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 34px;
+  margin: 22px 0 8px;
+}
+/* Bumped up from the initial pass (prev/next at the default 38px icon-btn size, play at 66px) —
+   read as too small relative to the rest of the screen per explicit feedback. */
+.np-transport .icon-btn:not(.np-play) { width: 52px; height: 52px; }
+.np-play { width: 82px; height: 82px; }
+
+.np-repeat-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 26px;
+  margin-bottom: 6px;
+}
+.np-repeat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: var(--ink-mute);
+  transition: color var(--dur-medium) var(--ease-standard), background var(--dur-medium) var(--ease-standard), transform var(--dur-fast) var(--ease-swift);
+}
+.np-repeat-btn:active { transform: scale(0.9); }
+/* Selected state fades in via a plain opacity/color transition (not a swap) — color itself
+   rides --np-accent's own transition, so both the "which one's selected" change and an album-art
+   color change animate smoothly regardless of which triggered the update. */
+.np-repeat-btn.is-active { color: var(--np-accent); background: color-mix(in srgb, var(--np-accent) 16%, transparent); }
+
+.np-action-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 18px;
+}
+.np-action-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 2px;
+  border-radius: var(--glass-radius-sm);
+  color: var(--ink-dim);
+  font-size: 10.5px;
+  font-weight: 600;
+  transition: color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+}
+.np-action-btn:active { background: rgba(255, 255, 255, 0.06); }
+.np-action-btn.is-active { color: var(--ice); }
+
+.np-sleep-popup {
+  position: fixed;
+  z-index: 210;
+  padding: 8px;
+  min-width: 140px;
+  animation: fadeSlideUp var(--dur-fast) var(--ease-standard);
+  transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+}
+.np-sleep-popup.is-closing { opacity: 0; transform: translateY(8px); }
+.np-sleep-popup__item {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: var(--glass-radius-sm);
+  font-size: 13px;
+  text-align: left;
+  color: var(--ink);
+}
+.np-sleep-popup__item:active { background: rgba(255, 255, 255, 0.08); }
+.np-sleep-popup__item.is-active { color: var(--ice); font-weight: 700; }
+
+.np-bottom-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 206;
+  max-height: 60vh;
+  padding: 16px 16px calc(var(--safe-bottom) + 16px);
+  border-radius: 19px 19px 0 0;
+  animation: fadeSlideUp var(--dur-medium) var(--ease-standard);
+  transition: opacity var(--dur-medium) var(--ease-standard), transform var(--dur-medium) var(--ease-standard);
+  overflow-y: auto;
+}
+.np-bottom-sheet.is-closing { opacity: 0; transform: translateY(24px); }
+.np-bottom-sheet--tall { max-height: 72vh; }
+.np-bottom-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}

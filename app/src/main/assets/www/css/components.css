@@ -1,0 +1,975 @@
+/* ============================================================
+   Glass panel — gradient fill (top-lighter/bottom-heavier) +
+   backdrop-filter blur/saturate + a 3-layer box-shadow (inset top
+   highlight simulating light catching the edge, a tight "contact"
+   shadow, a soft wide "ambient" shadow underneath). No pseudo-element
+   sheen/shine — the highlight is purely the inset box-shadow line,
+   deliberately restrained per explicit feedback that a bright top
+   stroke looked bad. Only border-radius is parameterized since this
+   same class backs many differently-shaped components across the app.
+   ============================================================ */
+.glass {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--glass-radius-md);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%),
+    var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+}
+.glass > * { position: relative; z-index: 2; }
+
+/* ============================================================
+   Accordion — used by Settings so every section is collapsed by
+   default (icon + title + one-line summary), expanding via a CSS
+   grid-rows 0fr->1fr transition (no JS height measuring needed).
+   ============================================================ */
+.accordion-section { overflow: hidden; margin-bottom: 12px; }
+.accordion-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  cursor: pointer;
+}
+.accordion-header__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--glass-radius-sm);
+  /* Colorway-driven tint (--bg-1) instead of a fixed --ice baby-blue, matching the same fix
+     applied to the bottom nav's active-tab color. */
+  background: color-mix(in srgb, var(--bg-1) 14%, transparent);
+  color: var(--bg-1);
+}
+.accordion-header__text { flex: 1; min-width: 0; }
+.accordion-header__title { font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+.accordion-header__summary {
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.accordion-chevron { color: var(--ink-mute); flex-shrink: 0; transition: transform var(--dur-medium) var(--ease-standard); }
+.accordion-section.is-open .accordion-chevron { transform: rotate(180deg); }
+.accordion-body-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-medium) var(--ease-standard);
+}
+.accordion-section.is-open .accordion-body-wrap { grid-template-rows: 1fr; }
+.accordion-body { overflow: hidden; }
+.accordion-body-inner { padding: 0 16px 16px; }
+
+/* ============================================================
+   Styled checkbox — used by confirmation dialogs (e.g. Erase Library's
+   "move to trash instead" option).
+   ============================================================ */
+.erase-checkbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--glass-edge);
+  background: rgba(255, 255, 255, 0.03);
+  transition: background var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast) var(--ease-swift);
+}
+.erase-checkbox svg {
+  width: 13px;
+  height: 13px;
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity var(--dur-fast), transform var(--dur-fast) var(--ease-swift);
+}
+.erase-checkbox.is-checked {
+  background: var(--accent-a);
+  border-color: var(--accent-a);
+}
+.erase-checkbox.is-checked svg { opacity: 1; transform: scale(1); }
+
+/* ============================================================
+   Equalizer editable curve — ported structure-for-structure from the
+   older Compose-era reference app's own SVG equalizer graph
+   (app-embyr-atlas/v-1.1/.../screens.css's .eq-curve-* rules +
+   settings.js's buildEqCurveGraph), which is what an actual "exact
+   design copy" request meant matching: SVG (not canvas), a dashed 0dB
+   line, a smooth Catmull-Rom curve with round caps/joins and a glow,
+   a live filled backdrop under the curve, and dark-ringed accent-filled
+   draggable points with their own glow — including color (--eq-accent,
+   violet, tokens.css), matching the reference screenshot exactly rather
+   than reusing this app's --ice. Everything else copied as closely as
+   the different data shape (5 fixed bands here vs. that app's real
+   per-device band count) allows.
+   ============================================================ */
+.eq-curve-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 320 / 130;
+  touch-action: none;
+}
+.eq-curve-zero-line { stroke: rgba(255, 255, 255, 0.22); stroke-width: 1; stroke-dasharray: 3 3; }
+/* Violet, matching the reference screenshot exactly (it's also already this app's own "aurora"
+   playlist-cover color, --eq-accent isn't a new hue introduced just for this). */
+.eq-curve-line {
+  fill: none;
+  stroke: var(--eq-accent, #8b5cf6);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.5));
+}
+.eq-curve-area {
+  fill: var(--eq-accent, #8b5cf6);
+  opacity: 0.22;
+  stroke: none;
+  transition: fill 500ms ease;
+}
+.eq-curve-point {
+  fill: var(--eq-accent, #8b5cf6);
+  stroke: var(--deep);
+  stroke-width: 3.5;
+  cursor: grab;
+  touch-action: none;
+  filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.55));
+  transition: filter var(--dur-medium) var(--ease-standard);
+}
+.eq-curve-point:active, .eq-curve-point.is-dragging {
+  cursor: grabbing;
+  filter: drop-shadow(0 0 9px rgba(139, 92, 246, 0.8));
+}
+
+.glass--lg { border-radius: var(--glass-radius-lg); }
+.glass--sm { border-radius: var(--glass-radius-sm); }
+.glass--pill { border-radius: var(--glass-radius-pill); }
+/* Elevated tier for genuinely floating surfaces (modal sheets, mini player, bottom nav, header)
+   — stronger blur + slightly richer fill + brighter border, same box-shadow shape underneath. */
+.glass--strong {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  backdrop-filter: var(--glass-blur-strong);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 50px;
+  /* min-height + vertical padding (not a fixed height) so a label too long for one line wraps
+     onto a second instead of getting clipped by this class's own overflow:hidden — a fixed
+     height with overflow:hidden was silently cutting off text on longer button labels. */
+  padding: 10px 22px;
+  text-align: center;
+  line-height: 1.25;
+  /* Unified app-wide rounding (matches the bottom nav, Library's track-list widget, etc.) —
+     was a full pill shape, which read as inconsistent next to everything else per feedback. */
+  border-radius: var(--glass-radius-md);
+  /* Tinted glass, not a solid saturated gradient blob — consistent with "liquid glass
+     throughout" and dialed back from the old full-saturation neon-pink-glow version per
+     explicit feedback that buttons looked bad/too bright. Brand-color-tinted but restrained. */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
+    linear-gradient(135deg, rgba(51, 70, 214, 0.4), rgba(138, 47, 217, 0.4));
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: var(--glass-shadow);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  transition: transform var(--dur-fast) var(--ease-swift), box-shadow var(--dur-fast) var(--ease-swift), opacity var(--dur-fast);
+}
+.btn-primary:active { transform: scale(0.965); }
+.btn-primary:disabled { opacity: 0.4; pointer-events: none; }
+
+.btn-glass {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  /* min-height + vertical padding, not a fixed height — this class is frequently combined with
+     .glass (overflow:hidden), and a fixed height there was clipping any label that needed to
+     wrap onto a second line instead of letting the button grow to fit it. */
+  padding: 10px 18px;
+  text-align: center;
+  line-height: 1.25;
+  /* Matches .btn-primary's own rounding (both --glass-radius-md, the app's unified radius) so a
+     Cancel (.btn-glass.glass) sitting next to a Confirm (.btn-primary) button in the same row
+     always has the same corner shape — explicit here since plain .glass alone would already
+     resolve to the same value, but relying on that implicitly once bit us when it didn't. */
+  border-radius: var(--glass-radius-md);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+  transition: transform var(--dur-fast) var(--ease-swift), background var(--dur-fast);
+}
+.btn-glass:active { transform: scale(0.96); }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--glass-radius-pill);
+  color: var(--ink-dim);
+  transition: transform var(--dur-fast) var(--ease-swift), color var(--dur-fast), background var(--dur-fast);
+}
+.icon-btn:active { transform: scale(0.88); }
+.icon-btn.icon-btn--accent { color: var(--ice); }
+
+/* ============================================================
+   Icon-morph button — a two-icon (usually dots -> X) button that
+   cross-fades + rotates between its two states on .is-open,
+   originally the Now Playing 3-dot menu, now the shared pattern
+   for every menu-trigger icon button in the app.
+   ============================================================ */
+.icon-morph-btn { position: relative; }
+.icon-morph-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+}
+.icon-morph-icon--a { opacity: 1; transform: rotate(0deg); }
+.icon-morph-icon--b { opacity: 0; transform: rotate(-90deg); position: static; }
+.icon-morph-btn.is-open .icon-morph-icon--a { opacity: 0; transform: rotate(90deg); }
+.icon-morph-btn.is-open .icon-morph-icon--b { opacity: 1; transform: rotate(0deg); }
+
+/* ============================================================
+   Chips / segmented selectors
+   ============================================================ */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--glass-radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  /* Chips live in horizontally-scrolling rows (.chip-row { overflow-x: auto }) — without this,
+     flexbox's default flex-shrink:1 could compress a chip below its label's natural width, and
+     combined with .glass's own overflow:hidden (most chips are class="chip glass") that
+     silently clipped the tail of longer labels like "Recently Played" instead of just letting
+     the row scroll further, which is what overflow-x:auto is there for. */
+  flex-shrink: 0;
+  transition: background var(--dur-fast), color var(--dur-fast), transform var(--dur-fast) var(--ease-swift);
+}
+.chip:active { transform: scale(0.95); }
+
+/* Library's filter row — 4 icon-only toggle chips, evenly split across the full width instead
+   of a horizontally-scrolling row, so every filter is visible and reachable at a glance. */
+.lib-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.icon-chip {
+  width: 100%;
+  height: 42px;
+  padding: 0;
+  /* Library's Liked/Most Played/Recent/Trash filter row — overrides .chip's own pill shape
+     (999px) so these match the app's unified rounding (same radius as the bottom nav) instead
+     of standing out as fully round buttons next to everything else. */
+  border-radius: var(--glass-radius-md);
+}
+.chip.is-selected {
+  color: var(--ink);
+  background: linear-gradient(135deg, rgba(51, 70, 214, 0.32), rgba(138, 47, 217, 0.32));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+/* ============================================================
+   Embedded scrolling — a fixed-size/position frame whose rounded
+   corners crop the scrollbar. The outer frame owns the radius +
+   overflow:hidden; the inner element is what actually scrolls, so
+   the scrollbar (rendered at the inner element's edge) is clipped
+   by the outer frame rather than poking past the rounded corners.
+   ============================================================ */
+.embedded-scroll-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: inherit;
+}
+/* Used where the scroll frame IS the visible surface (e.g. Library's track list) rather than
+   being nested inside some other glass container — a real bounded glass panel with its own
+   border/shadow/radius, so a long track list reads as one clean self-contained widget instead
+   of just bleeding into the rest of the page. */
+.embedded-scroll-frame--widget {
+  border-radius: var(--glass-radius-lg);
+  padding: 4px 0;
+  /* Two resting positions, smoothly connected: a small gap above the bottom nav normally, and
+     enough extra clearance to sit above the mini player (see #mini-player in layout.css —
+     roughly its own 18px offset + ~56px height) once one is actually showing. Toggled via
+     .is-mini-player-visible in library.js, kept in sync with playback state. */
+  margin-bottom: 8px;
+  transition: margin-bottom var(--dur-slow) var(--ease-standard);
+}
+.embedded-scroll-frame--widget.is-mini-player-visible { margin-bottom: 78px; }
+.embedded-scroll-frame--widget .embedded-scroll { inset: 4px 4px; padding-right: 8px; }
+/* Native scrollbars don't respect a parent's border-radius — right at the top/bottom of a
+   scroll, the thumb's straight rectangular ends would visibly poke out past the frame's rounded
+   corner arc if the scroller filled the frame exactly. Fix: inset the scroller a few px on every
+   edge (not just horizontally for the thumb's width) so its straight ends never reach into the
+   corner curve at all, regardless of scroll position. */
+.embedded-scroll {
+  position: absolute;
+  inset: 3px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  padding-right: 4px; /* keeps content clear of the thumb */
+}
+.embedded-scroll::-webkit-scrollbar {
+  display: block;
+  width: 5px;
+}
+.embedded-scroll::-webkit-scrollbar-track { background: transparent; }
+.embedded-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 3px;
+  transition: background var(--dur-fast);
+}
+.embedded-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.36); }
+
+/* ============================================================
+   Search input
+   ============================================================ */
+/* Distinct from a plain .glass panel — a subtle inward-pressed "well" (soft inset shadow, no
+   bright outline) plus a slightly rounder pill radius, so it reads unmistakably as a search
+   field at a glance without resorting to a harsh contrasting border. */
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 16px;
+  color: var(--ink);
+  border-radius: var(--glass-radius-pill);
+  background: rgba(0, 0, 0, 0.12);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 0 0 1px var(--glass-edge-soft);
+}
+.search-field:focus-within { box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 0 0 1.5px color-mix(in srgb, var(--bg-1) 55%, var(--glass-edge)); }
+.search-field svg { color: var(--ink-mute); flex-shrink: 0; }
+:root[data-appearance="light"] .search-field { background: rgba(20, 16, 31, 0.05); box-shadow: inset 0 1px 3px rgba(20, 16, 31, 0.12), inset 0 0 0 1px var(--glass-edge-soft); }
+.search-field input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--ink);
+  font-size: 15px;
+}
+.search-field input::placeholder { color: var(--ink-mute); }
+
+/* ============================================================
+   Toggle switch
+   ============================================================ */
+.switch {
+  position: relative;
+  width: 46px;
+  height: 27px;
+  border-radius: var(--glass-radius-pill);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px var(--glass-edge-soft);
+  transition: background var(--dur-medium) var(--ease-standard);
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fff, #dde8f2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform var(--dur-medium) var(--ease-standard);
+}
+.switch.is-on {
+  background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+}
+.switch.is-on::after { transform: translateX(19px); }
+
+/* ============================================================
+   Range slider — used by Crossfade duration (Settings > Effects
+   & Playback) and anywhere else a smooth 0..max drag is needed.
+   ============================================================ */
+.atlas-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: var(--glass-radius-pill);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px var(--glass-edge-soft);
+  outline: none;
+  cursor: pointer;
+  transition: background var(--dur-medium) var(--ease-standard);
+}
+.atlas-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fff, #dde8f2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.atlas-slider::-webkit-slider-thumb:active {
+  transform: scale(1.15);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(255, 255, 255, 0.1);
+}
+.atlas-slider::-moz-range-track {
+  height: 6px;
+  border-radius: var(--glass-radius-pill);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px var(--glass-edge-soft);
+}
+.atlas-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fff, #dde8f2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+.atlas-slider::-moz-range-thumb:active { transform: scale(1.15); }
+
+/* ============================================================
+   Track / result / queue row — the one shared "card with art,
+   title, subtext, trailing controls" recipe, reused everywhere.
+   ============================================================ */
+.track-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--glass-radius-sm);
+  transition: background var(--dur-fast), opacity var(--dur-medium) var(--ease-standard);
+}
+.track-row:active { background: rgba(255, 255, 255, 0.05); }
+
+/* Discover's selectable result rows — tapping a row selects it (enables the Download Track
+   button below); the checkmark fades/scales in rather than just appearing. */
+.disc-result-row { cursor: pointer; transition: background var(--dur-fast) var(--ease-standard); }
+.disc-result-row.is-selected { background: rgba(139, 92, 246, 0.14); }
+.disc-result-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--eq-accent, #8b5cf6);
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+  flex-shrink: 0;
+}
+.disc-result-row.is-selected .disc-result-check { opacity: 1; transform: scale(1); }
+.track-row__art {
+  width: 48px;
+  height: 48px;
+  border-radius: 9px;
+  object-fit: cover;
+  background: var(--glass-fill);
+  flex-shrink: 0;
+}
+.track-row__body { flex: 1; min-width: 0; }
+.track-row__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.track-row__subtitle {
+  font-size: 13px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.track-row__meta {
+  font-size: 13px;
+  color: var(--ink-mute);
+  flex-shrink: 0;
+}
+
+/* Playlist indicator badge shown in place of an artist label wherever a card represents a
+   playlist rather than a single track (queue, discover previews, etc.). */
+.playlist-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ice);
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-edge) 50%, transparent);
+  margin: 14px 0;
+}
+
+.divider-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 10px 0;
+}
+.divider-label::before, .divider-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--glass-edge-soft);
+}
+
+/* ============================================================
+   Shared animation keyframes
+   ============================================================ */
+@keyframes fadeSlideDown {
+  from { opacity: 0; transform: translateY(-14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(51, 70, 214, 0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(51, 70, 214, 0); }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-0.6deg) scale(1.02); }
+  50% { transform: rotate(0.6deg) scale(1.02); }
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes gradientDrift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes barPulse {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+
+/* ============================================================
+   Download queue — animated gradient per-item bars + global bar
+   ============================================================ */
+.dq-bar {
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  margin-top: 8px;
+}
+.dq-bar__fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent-a), var(--accent-b), var(--accent-c), var(--accent-a));
+  background-size: 200% 100%;
+  animation: gradientDrift 1.6s linear infinite;
+  transform-origin: left;
+  transition: transform var(--dur-medium) var(--ease-standard);
+}
+.dq-global-bar {
+  height: 8px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.dq-global-bar__fill {
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--accent-a), var(--accent-b), var(--accent-c), var(--accent-a));
+  background-size: 200% 100%;
+  animation: gradientDrift 2.2s linear infinite;
+  transition: width var(--dur-medium) var(--ease-standard);
+}
+
+/* ============================================================
+   Queue page — drag reorder + now-playing visualizer + search
+   ============================================================ */
+.queue-row { position: relative; touch-action: pan-y; }
+.queue-row [data-handle] { touch-action: none; }
+.queue-row.is-dragging {
+  z-index: 5;
+  animation: wiggle 220ms ease-in-out infinite;
+  box-shadow: var(--glass-shadow);
+  background: rgba(255, 255, 255, 0.07);
+  opacity: 0.95;
+}
+.queue-row__placeholder-gap {
+  height: 0;
+  transition: height var(--dur-fast) var(--ease-standard);
+}
+.queue-row__placeholder-gap.is-open { height: 64px; }
+
+.queue-visualizer {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+  margin-left: 4px;
+}
+.queue-visualizer span {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--ice);
+  animation: barPulse 900ms ease-in-out infinite;
+}
+.queue-visualizer span:nth-child(1) { animation-delay: 0ms; height: 14px; }
+.queue-visualizer span:nth-child(2) { animation-delay: 180ms; height: 10px; }
+.queue-visualizer span:nth-child(3) { animation-delay: 360ms; height: 12px; }
+
+.search-highlight { color: var(--ice); font-weight: 800; }
+.track-row.is-dimmed { opacity: 0.3; }
+.track-row.is-match-pulse { animation: glowPulse 700ms ease-out 1; }
+
+/* ============================================================
+   Swipe-gesture track menu — replaces the old 3-dot dropdown.
+   Swipe left (Gmail-style): a red "Trash" backdrop grows in
+   behind the row as it's dragged; releasing past the threshold
+   sends the track to Trash. Swipe right: opens a floating
+   toolbar (Close/Rename/Add to Playlist/Move to Trash) with the
+   rest of the screen dimmed, instead of translating the row.
+   ============================================================ */
+.track-swipe { position: relative; overflow: hidden; border-radius: var(--glass-radius-sm); --swipe-progress: 0; --swipe-progress-right: 0; }
+.track-swipe__bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  opacity: 0;
+  border-radius: inherit;
+  transition: opacity 60ms linear;
+}
+.track-swipe__bg > * { transition: transform 60ms linear; }
+.track-swipe__bg--left {
+  justify-content: flex-end;
+  padding-right: 20px;
+  background: linear-gradient(90deg, transparent, rgba(248, 113, 113, 0.85) 55%, var(--danger));
+}
+.track-swipe__bg--left > * { transform: scale(calc(0.7 + var(--swipe-progress, 0) * 0.3)); }
+.track-swipe__bg--right {
+  justify-content: flex-start;
+  padding-left: 20px;
+  background: linear-gradient(270deg, transparent, rgba(52, 211, 153, 0.85) 55%, #10b981);
+}
+.track-swipe__bg--right > * { transform: scale(calc(0.7 + var(--swipe-progress-right, 0) * 0.3)); }
+/* Opacity is driven by --swipe-progress/--swipe-progress-right (set inline per-frame while
+   dragging, 0..1) so the backdrop fades in gradually with the drag instead of snapping to full
+   opacity the instant you move at all. */
+.track-swipe.is-dragging-left .track-swipe__bg--left { opacity: var(--swipe-progress, 1); }
+.track-swipe.is-dragging-right .track-swipe__bg--right { opacity: var(--swipe-progress-right, 1); }
+.track-swipe .track-row { background: var(--bg-card, transparent); position: relative; touch-action: pan-y; }
+.track-swipe.is-dragging .track-row,
+.track-swipe.is-dragging .track-row:active { background: var(--bg-card, transparent); }
+.track-swipe .track-row:not(.is-swipe-animating) { transition: none; }
+.track-row.is-swipe-animating { transition: transform var(--dur-medium) var(--ease-standard); }
+
+/* Recover All / Delete All ↔ Play / Shuffle swap under the Library filter chips — the buttons
+   themselves (.lib-actions-row, its two children) are static and never animate; only the label
+   text/icon inside each one crossfades to its new content. */
+.lib-action-label { display: inline-flex; align-items: center; gap: 8px; transition: opacity 120ms ease; }
+.lib-action-label.is-swapping { opacity: 0; }
+
+/* Library list crossfade on filter/search changes. */
+#lib-list { transition: opacity 140ms var(--ease-standard); }
+#lib-list.is-list-out { opacity: 0; }
+#lib-list.is-list-in { opacity: 1; }
+
+.swipe-toolbar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 205;
+  background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  animation: fadeIn var(--dur-fast) var(--ease-standard);
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.swipe-toolbar-overlay.is-closing { opacity: 0; }
+.swipe-toolbar {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  z-index: 206;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  animation: fadeSlideUp var(--dur-medium) var(--ease-standard);
+  transition: opacity var(--dur-medium) var(--ease-standard), transform var(--dur-medium) var(--ease-standard);
+}
+.swipe-toolbar.is-closing { opacity: 0; transform: translateY(10px); }
+.swipe-toolbar__btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px;
+  border-radius: var(--glass-radius-sm);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.swipe-toolbar__btn:active { background: rgba(255, 255, 255, 0.08); }
+.swipe-toolbar__btn.is-danger { color: var(--danger); }
+
+/* ============================================================
+   Shared action-sheet / confirm-modal chrome — used by
+   showActionSheet() (library/playlists/queue context menus) and
+   any bottom-anchored or centered confirm dialog.
+   ============================================================ */
+.action-sheet-overlay, .confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.45);
+  /* A very slight blur on top of the dim, not just the dim alone — makes it easier to tell the
+     popup apart from the page underneath at a glance, especially over busy/detailed screens,
+     without being heavy enough to read as a distinct visual effect of its own. */
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  animation: fadeIn var(--dur-fast) var(--ease-standard);
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.action-sheet-overlay { display: flex; align-items: flex-end; }
+/* Top-anchored with fixed headroom (not vertically centered) — this is the ONE position a
+   confirm/prompt modal ever renders at, keyboard open or not, rather than starting centered and
+   then snapping upward the instant a text field inside it focuses and applyKeyboardAvoidance
+   (overlay.js) kicks in. Sized to clear where a keyboard would land on essentially any device,
+   so that JS only ever needs to make small, smoothly-animated corrections (see the transition
+   below) instead of a big jump. */
+.confirm-modal-overlay { display: flex; align-items: flex-start; justify-content: center; padding: 24px; padding-top: 9vh; transition: opacity var(--dur-fast) var(--ease-standard), height var(--dur-medium) var(--ease-standard), top var(--dur-medium) var(--ease-standard); }
+.action-sheet-overlay.is-closing, .confirm-modal-overlay.is-closing { opacity: 0; }
+
+.action-sheet-card {
+  width: 100%;
+  border-radius: 19px 19px 0 0;
+  padding: 16px;
+  animation: fadeSlideUp var(--dur-medium) var(--ease-standard);
+  transition: opacity var(--dur-medium) var(--ease-standard), transform var(--dur-medium) var(--ease-standard);
+}
+.action-sheet-overlay.is-closing .action-sheet-card { opacity: 0; transform: translateY(24px); }
+
+.confirm-modal-card {
+  width: 100%;
+  max-width: 340px;
+  padding: 22px;
+  animation: fadeSlideUp var(--dur-medium) var(--ease-standard);
+  transition: opacity var(--dur-medium) var(--ease-standard), transform var(--dur-medium) var(--ease-standard);
+}
+.confirm-modal-overlay.is-closing .confirm-modal-card { opacity: 0; transform: scale(0.95); }
+
+/* ============================================================
+   Generic glass dropdown (js/glassDropdown.js) — audio quality,
+   Idle Compression duration. Same visual language as Now Playing's
+   3-dot menu (.np-dropdown, nowPlaying.css): a floating glass panel,
+   downward by default, item rows with a press state. Appended to
+   document.body and positioned via JS (not a CSS-positioned child
+   of the trigger) so it can never get clipped by a scroll/reveal
+   container's own overflow:hidden — see glassDropdown.js's own doc
+   comment for why that matters.
+   ============================================================ */
+.gd-trigger { height: 46px; padding: 0 14px; display: flex; align-items: center; gap: 6px; border: none; }
+.gd-trigger__chevron { display: flex; color: var(--ink-mute); transition: transform var(--dur-medium) var(--ease-standard); }
+.gd-trigger.is-open .gd-trigger__chevron { transform: rotate(180deg); }
+.gd-panel {
+  position: fixed;
+  min-width: 170px;
+  padding: 8px;
+  z-index: 300;
+  opacity: 0;
+  transform: scale(0.94) translateY(-6px);
+  transform-origin: top right;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+}
+.gd-panel--up { transform-origin: bottom right; transform: scale(0.94) translateY(6px); }
+.gd-panel.is-open { opacity: 1; transform: scale(1) translateY(0); pointer-events: auto; }
+.gd-panel__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: var(--glass-radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  transition: background 120ms, color 120ms;
+}
+.gd-panel__item:active { background: rgba(255, 255, 255, 0.08); }
+.gd-panel__item.is-selected { color: var(--bg-1); background: color-mix(in srgb, var(--bg-1) 16%, transparent); }
+
+/* ============================================================
+   Idle Compression's "Compress after" duration row — reveals from
+   behind the Idle Compression toggle row when switched on, rather
+   than snapping in, via the same grid-rows 0fr->1fr trick the
+   Settings accordion itself uses, plus a fade+slide on the inner
+   content so it genuinely reads as sliding out from behind that
+   section instead of just growing.
+   ============================================================ */
+.idle-compress-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-medium) var(--ease-standard);
+}
+.idle-compress-reveal.is-open { grid-template-rows: 1fr; }
+.idle-compress-reveal__clip { overflow: hidden; }
+.idle-compress-reveal__inner {
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity var(--dur-medium) var(--ease-standard), transform var(--dur-medium) var(--ease-standard);
+  padding-top: 2px;
+}
+.idle-compress-reveal.is-open .idle-compress-reveal__inner { opacity: 1; transform: translateY(0); }
+
+/* ============================================================
+   Discover — multi-select bottom bar + morphing "View Selected" panel
+   ============================================================ */
+.disc-dl-label { display: inline-block; transition: opacity 120ms ease; }
+.disc-dl-label.is-swapping { opacity: 0; }
+.disc-dl-subtext {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-mute);
+  text-align: center;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height var(--dur-medium) var(--ease-standard), opacity var(--dur-medium) var(--ease-standard), margin-top var(--dur-medium) var(--ease-standard);
+}
+.disc-dl-subtext.is-visible { max-height: 20px; opacity: 1; margin-top: 6px; }
+
+.disc-selected-panel {
+  position: absolute;
+  overflow: hidden;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+}
+.disc-selected-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 6px 8px;
+  flex-shrink: 0;
+}
+.disc-selected-panel__list {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 0 4px 4px;
+}
+.disc-selected-row { transition: opacity 220ms ease, transform 220ms ease, height 260ms ease, margin 260ms ease, padding 260ms ease; }
+.disc-selected-row.is-removing { opacity: 0; transform: translateX(-40%); }
+@keyframes dspRowIn {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Add-to-Playlist sheet rows */
+.atp-list { max-height: 46vh; overflow-y: auto; }
+.atp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 6px;
+  border-radius: var(--glass-radius-sm);
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.atp-row:active { background: rgba(255, 255, 255, 0.06); }
+.atp-row__cover { width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; }
+.atp-row__name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.atp-row__check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ice);
+  color: #06111a;
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity var(--dur-medium) var(--ease-standard), transform var(--dur-medium) var(--ease-standard);
+}
+.atp-row.is-added .atp-row__check { opacity: 1; transform: scale(1); }
+.atp-row.is-added .atp-row__name { color: var(--ice); }

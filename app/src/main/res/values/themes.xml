@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The WebView owns all real theming (assets/www/css/). This just needs to exist for
+         the manifest/launch window and picks dark colors so there's no white flash before the
+         page loads. -->
+    <style name="Theme.Atlas" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/atlas_bg_base</item>
+        <item name="android:statusBarColor">@color/atlas_bg_base</item>
+        <item name="android:navigationBarColor">@color/atlas_bg_base</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

@@ -1,0 +1,103 @@
+/* Design tokens. Glass recipe structure (gradient fill + backdrop-filter blur/saturate + inset-
+   highlight/contact-shadow/ambient-shadow box-shadow, no pseudo-element shine) is adapted from
+   a UI-layout reference pass over an earlier Atlas build — same proven 3-layer shadow shape,
+   retuned to this app's own neutral shadow tones and colorway system rather than copied
+   verbatim (that build used a warm ember palette; this one doesn't). Extended with Atlas's own
+   accent/status colors and the 8 colorway backgrounds. */
+:root {
+  /* ---- base ink / glass (from the mockup) ---- */
+  --ink: #f4f7ff;
+  --ink-dim: rgba(244, 247, 255, 0.68);
+  --ink-mute: rgba(244, 247, 255, 0.44);
+  --ice: #a9d6e5;
+  --moon: #e8ecf7;
+  --deep: #060a1a;
+  --glass-fill: rgba(255, 255, 255, 0.035);
+  --glass-fill-strong: rgba(255, 255, 255, 0.09);
+  --glass-edge: rgba(255, 255, 255, 0.14);
+  --glass-edge-soft: rgba(255, 255, 255, 0.1);
+
+  /* ---- Ryft brand accents — dimmed/desaturated versions of the brand gradient
+     (#0008ff -> #bb00ff), not full-saturation neon. Buttons/highlights/glows read off
+     these; the literal exact brand hex values are reserved for the background gradient
+     itself (see backgrounds.css's --bg-1/--bg-2 on the default colorway). ---- */
+  --accent-a: #3346d6;
+  --accent-b: #8a2fd9;
+  --accent-c: #5c23a8;
+  --eq-accent: #8b5cf6; /* the equalizer curve/dots' own color, matches the reference design exactly */
+  --success: #4ade80;
+  --danger: #f87171;
+  --warning: #fbbf24;
+
+  /* ---- glass panel recipe ---- */
+  /* Blur only — no saturate() boost. The saturation lift made everything read brighter/more
+     in-your-face than intended for a restrained liquid-glass look; per explicit feedback, glass
+     should just blur what's behind it, not intensify its colors.
+     Reduced from 15px — backdrop-filter blur is one of the most expensive things a mobile
+     WebView compositor does, and it's applied to dozens of simultaneously-visible glass panels;
+     ~40% less blur radius here is a real, measurable rendering-cost cut, not just cosmetic,
+     while still reading clearly as "glass" rather than a flat panel. Settings > Phone Heat
+     Optimization (base.css) cuts it further on top of this when enabled. */
+  --glass-blur: blur(9px);
+  --glass-blur-strong: blur(9px);
+  /* Was a distinct larger radius (26px) for "big panel" surfaces — unified to match
+     --glass-radius-md (the bottom nav's own rounding, explicitly called out as the app's
+     reference shape) per feedback that corner rounding read as inconsistent across the app
+     (the bottom nav vs. Library's embedded track-list widget vs. its filter chips all differed).
+     Kept as its own token (rather than deleting it and switching call sites to -md directly) so
+     any future "these two tiers should differ again" decision has one place to change. */
+  --glass-radius-lg: var(--glass-radius-md);
+  --glass-radius-md: 16px;
+  --glass-radius-sm: 11px;
+  --glass-radius-pill: 999px;
+  --glass-highlight: rgba(255, 255, 255, 0.14);
+  /* 3-layer shape: inset top highlight (light catching the top edge), a tight "contact" shadow,
+     a soft wide "ambient" shadow underneath — no ::before/::after pseudo-element sheen. */
+  --glass-shadow:
+    0 1px 0 var(--glass-highlight) inset,
+    0 2px 8px -2px rgba(0, 0, 0, 0.45),
+    0 20px 44px -18px rgba(0, 0, 0, 0.55);
+  --glass-shadow-soft:
+    0 1px 0 var(--glass-highlight) inset,
+    0 2px 6px -2px rgba(0, 0, 0, 0.3),
+    0 12px 28px -16px rgba(0, 0, 0, 0.4);
+
+  /* ---- motion ---- */
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-swift: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 160ms;
+  --dur-medium: 280ms;
+  --dur-slow: 420ms;
+
+  /* ---- layout ---- */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --header-height: 96px;
+  --nav-height: 64px;
+
+  /* ---- typography ---- */
+  --font-display: 'Neue Haas Display', 'Inter', sans-serif;
+  --font-text: 'Neue Haas Text', 'Inter', sans-serif;
+}
+
+/* Light variant overrides — applied via [data-appearance="light"] on <html>, independent of
+   which colorway is active (colorway drives the animated background specifically; appearance
+   drives glass/text contrast). */
+:root[data-appearance="light"] {
+  --ink: #14101f;
+  --ink-dim: rgba(20, 16, 31, 0.68);
+  --ink-mute: rgba(20, 16, 31, 0.46);
+  --glass-fill: rgba(255, 255, 255, 0.55);
+  --glass-fill-strong: rgba(255, 255, 255, 0.72);
+  --glass-edge: rgba(20, 16, 31, 0.14);
+  --glass-edge-soft: rgba(20, 16, 31, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.6);
+  --glass-shadow:
+    0 1px 0 var(--glass-highlight) inset,
+    0 2px 8px -3px rgba(20, 16, 31, 0.2),
+    0 20px 44px -20px rgba(20, 16, 31, 0.28);
+  --glass-shadow-soft:
+    0 1px 0 var(--glass-highlight) inset,
+    0 2px 6px -3px rgba(20, 16, 31, 0.14),
+    0 12px 26px -16px rgba(20, 16, 31, 0.2);
+}

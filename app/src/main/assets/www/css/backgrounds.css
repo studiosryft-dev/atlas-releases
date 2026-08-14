@@ -1,0 +1,103 @@
+/* ============================================================
+   Animated ambient background — 8 colorways x light/dark. Layered
+   wave gradient (js/wavesBg.js builds/animates the SVG itself into
+   #bg-root; this file just sizes/positions it), replacing the
+   older blob/sweep/twinkle system. Reads the same 4 CSS custom
+   properties (--bg-base/--bg-1/--bg-2/--bg-3) each colorway rule
+   below overrides, so switching colorway re-tints the waves without
+   any change to how they're generated.
+   @property registers them as typed <color> so switching colorway
+   animates/cross-fades the actual values via `transition` — and
+   wavesBg.js's own MutationObserver re-samples them after that
+   transition settles to re-tint the wave layers to match.
+   ============================================================ */
+
+@property --bg-base { syntax: '<color>'; inherits: true; initial-value: #060a1a; }
+@property --bg-1 { syntax: '<color>'; inherits: true; initial-value: #ff10f0; }
+@property --bg-2 { syntax: '<color>'; inherits: true; initial-value: #6600ff; }
+@property --bg-3 { syntax: '<color>'; inherits: true; initial-value: #ff00cb; }
+
+/* Shared by #bg-root (the main shell background) AND every indexed page's own `.indexed-page__bg`
+   (js/wavesBg.js mounts an independent instance into each — see app.js's openIndexedPage) — same
+   opaque gradient recipe everywhere a wave instance lives, so an indexed page's background is
+   just as fully opaque as the main shell's, not relying on anything behind it. */
+#bg-root, .waves-bg-host {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  /* A gradient (not a flat --bg-base fill) so any area the wave layers don't happen to reach —
+     the very top edge above the highest layer's peak, or the very bottom below the lowest
+     layer's trough — still shows a soft wash of the colorway's own tones instead of reading as
+     a flat black bar. The wave <path> layers paint on top of this and still do almost all the
+     visible work; this is just what shows through the gaps between/around them. */
+  background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-base) 45%, var(--bg-base) 65%, var(--bg-3) 100%);
+  transition: --bg-base 1100ms var(--ease-standard), --bg-1 1100ms var(--ease-standard),
+              --bg-2 1100ms var(--ease-standard), --bg-3 1100ms var(--ease-standard);
+}
+.wave-bg-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* Colorway switches re-tint each wave layer's fill (js/wavesBg.js) via inline style (not
+   setAttribute — only style-property changes actually respect a CSS transition), so the wave
+   colors crossfade the same way #bg-root's own --bg-base does instead of snapping. */
+.wave-bg-svg path { transition: fill 1100ms var(--ease-standard); }
+
+/* Soft top/bottom vignette so the wave field still leaves the header/nav legible. */
+.bg-vignette {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg,
+    rgba(2, 4, 12, 0.5) 0%, rgba(2, 4, 12, 0) 20%,
+    rgba(2, 4, 12, 0) 68%, rgba(2, 4, 12, 0.32) 100%);
+  pointer-events: none;
+}
+:root[data-appearance="light"] .bg-vignette {
+  background: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 20%,
+    rgba(255, 255, 255, 0) 68%, rgba(255, 255, 255, 0.25) 100%);
+}
+
+/* ---- colorways (dark, default appearance) — "pulse" is the app's default colorway.
+   Values below are deliberately darker/less saturated than a "true neon" version of each hue —
+   per explicit feedback that several of these (tide's cyan, lagoon's cyan-blue, cosmic's
+   magenta especially) read like "being highbeamed by a car at 1am" rather than a dark ambient
+   background. Same hue identity per colorway, just pulled down in brightness/saturation. */
+:root[data-colorway="crimson"] { --bg-base: #100007; --bg-1: #d4003f; --bg-2: #7a002c; --bg-3: #2e000c; }
+:root[data-colorway="vapor"]   { --bg-base: #100010; --bg-1: #c20fb0; --bg-2: #7a0880; --bg-3: #3a0a3d; }
+:root[data-colorway="tide"]    { --bg-base: #000f13; --bg-1: #0098b8; --bg-2: #005e70; --bg-3: #002d38; }
+:root[data-colorway="pulse"]   { --bg-base: #07001a; --bg-1: #7000ff; --bg-2: #3d0090; --bg-3: #1a0040; }
+:root[data-colorway="sunset"]  { --bg-base: #150805; --bg-1: #d4256f; --bg-2: #cc7a32; --bg-3: #cc4d4e; }
+:root[data-colorway="lagoon"]  { --bg-base: #000e0c; --bg-1: #0038c2; --bg-2: #00a690; --bg-3: #00708f; }
+:root[data-colorway="cosmic"]  { --bg-base: #0a0018; --bg-1: #4d00c2; --bg-2: #c200a0; --bg-3: #8500b8; }
+
+/* ---- colorways (light appearance) — lifted base, same hue identity ---- */
+:root[data-appearance="light"][data-colorway="crimson"] { --bg-base: #fdeef1; --bg-1: #ff0054; --bg-2: #ff6d94; --bg-3: #ffb3c4; }
+:root[data-appearance="light"][data-colorway="vapor"]   { --bg-base: #fbeefc; --bg-1: #ff10f0; --bg-2: #e07ae3; --bg-3: #f2b8f0; }
+:root[data-appearance="light"][data-colorway="tide"]    { --bg-base: #eafbff; --bg-1: #00d4ff; --bg-2: #5fe0f5; --bg-3: #aef0fa; }
+:root[data-appearance="light"][data-colorway="pulse"]   { --bg-base: #f1eafd; --bg-1: #7000ff; --bg-2: #ac6dff; --bg-3: #d6b8ff; }
+:root[data-appearance="light"][data-colorway="sunset"]  { --bg-base: #fff2ea; --bg-1: #ff2d87; --bg-2: #ff9a3c; --bg-3: #ffc98f; }
+:root[data-appearance="light"][data-colorway="lagoon"]  { --bg-base: #eaf7ff; --bg-1: #0047ff; --bg-2: #00d4b8; --bg-3: #8fe8d8; }
+:root[data-appearance="light"][data-colorway="cosmic"]  { --bg-base: #f6eaff; --bg-1: #6600ff; --bg-2: #ff00c8; --bg-3: #e6a3ff; }
+
+/* ---- swatch chips used in Settings' colorway picker ---- */
+.colorway-swatch {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25), 0 4px 12px -4px rgba(0, 0, 0, 0.4);
+  transition: transform var(--dur-fast) var(--ease-swift);
+}
+.colorway-swatch.is-selected { transform: scale(1.12); box-shadow: 0 0 0 3px var(--ice), 0 4px 14px -4px rgba(0, 0, 0, 0.5); }
+.colorway-swatch[data-swatch="crimson"] { background: linear-gradient(135deg, #d4003f, #100007); }
+.colorway-swatch[data-swatch="vapor"] { background: linear-gradient(135deg, #c20fb0, #100010); }
+.colorway-swatch[data-swatch="tide"] { background: linear-gradient(135deg, #0098b8, #000f13); }
+.colorway-swatch[data-swatch="pulse"] { background: linear-gradient(135deg, #7000ff, #07001a); }
+.colorway-swatch[data-swatch="sunset"] { background: linear-gradient(135deg, #d4256f, #cc7a32); }
+.colorway-swatch[data-swatch="lagoon"] { background: linear-gradient(135deg, #0038c2, #00a690); }
+.colorway-swatch[data-swatch="cosmic"] { background: linear-gradient(135deg, #4d00c2, #c200a0); }

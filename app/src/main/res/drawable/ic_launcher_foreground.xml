@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder launcher mark — a simple angular "A" in the brand gradient tones.
+     Swap for real EmbyrLabs/Atlas brand art whenever that's ready; nothing else
+     depends on this file's contents. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#8B5CF6"
+        android:pathData="M54,26 L78,82 L66,82 L61,68 L47,68 L42,82 L30,82 Z M54,42 L48,58 L60,58 Z" />
+    <path
+        android:fillColor="#38BDF8"
+        android:fillAlpha="0.85"
+        android:pathData="M54,26 L78,82 L66,82 L61,68 L54,68 L54,42Z" />
+</vector>

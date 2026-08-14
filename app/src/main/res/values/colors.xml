@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base page background behind the WebView's own animated glass background — deep
+         blue-black so the native window background never flashes light before the page paints. -->
+    <color name="atlas_bg_base">#0A0A16</color>
+    <color name="ic_launcher_bg">#150A2E</color>
+</resources>
