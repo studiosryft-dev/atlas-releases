@@ -6,26 +6,23 @@ plugins {
 }
 
 android {
-    namespace = "com.embyrlabs.atlas"
+    namespace = "com.ryftlabs.atlas"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.embyrlabs.atlas"
+        applicationId = "com.ryftlabs.atlas"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
-        // Deployed embyr-backend-keystone on Render — always on regardless of your PC.
-        buildConfigField("String", "KEYSTONE_BASE_URL", "\"https://embyr-backend-keystone.onrender.com/\"")
-
-        // Same Supabase project as EmbyrKeystone, queried directly for update checks (see
-        // com.embyrlabs.atlas.update.UpdateChecker) rather than routing through the Render
-        // backend — release metadata is public/non-sensitive, and the anon key is exactly the
-        // credential meant to ship inside a client app (protected by RLS, not secrecy; see
-        // supabase-migrations/006_app_releases.sql's read-only policy).
-        buildConfigField("String", "SUPABASE_URL", "\"https://tykonepgafsortdodbfn.supabase.co\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR5a29uZXBnYWZzb3J0ZG9kYmZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxNDQ1MTMsImV4cCI6MjEwMTcyMDUxM30.zEP9lDFI1vNFY-h44lmInxw_UEJqScaOhRGyM-ZZDJc\"")
+        // Queried directly for update checks (see com.ryftlabs.atlas.update.UpdateChecker) rather
+        // than routing through the Keystone backend — release metadata is public/non-sensitive,
+        // and the publishable key is exactly the credential meant to ship inside a client app
+        // (protected by RLS, not secrecy; see supabase-migrations/014_app_releases.sql's
+        // read-only policy).
+        buildConfigField("String", "SUPABASE_URL", "\"https://vrdujtsvdmzemtosddmv.supabase.co\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"REPLACE_WITH_SB_PUBLISHABLE_KEY\"")
     }
 
     buildTypes {
@@ -61,9 +58,6 @@ dependencies {
     // avoiding a set of real WebView quirks file:// has around fetch()/relative resources).
     implementation(libs.androidx.webkit)
 
-    implementation(libs.retrofit.core)
-    implementation(libs.retrofit.kotlinx.serialization.converter)
-    implementation(libs.okhttp.logging.interceptor)
     implementation(libs.kotlinx.serialization.json)
 
     implementation(libs.datastore.preferences)

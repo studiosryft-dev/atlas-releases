@@ -11,9 +11,12 @@ const AccountScreen = (() => {
         <div style="color:var(--ink-mute); font-size:13px;">Loading account…</div>
       </div>
     `;
-    let me;
+    let acc, keys;
     try {
-      me = await Auth.api('account/me');
+      [acc, keys] = await Promise.all([
+        Auth.api('account/me'),
+        Auth.api('keys/mine').then((r) => r.keys || []),
+      ]);
     } catch (e) {
       el.innerHTML = `
         <div style="text-align:center; padding:60px 24px; color:var(--ink-dim);">
@@ -24,8 +27,7 @@ const AccountScreen = (() => {
       document.getElementById('acc-retry').onclick = () => render(el);
       return;
     }
-    const acc = me.account;
-    const roleLabel = { developer: 'Developer', moderator: 'Moderator', beta_tester: 'Beta Tester' }[acc.role] || 'Commercial User';
+    const roleLabel = { admin: 'Admin', moderator: 'Moderator' }[acc.role] || 'User';
 
     el.innerHTML = `
       <div class="glass" style="padding:18px; margin-bottom:16px;">
@@ -46,29 +48,26 @@ const AccountScreen = (() => {
       <div class="glass" style="padding:16px; margin-bottom:16px;">
         <div style="display:flex; align-items:center;"><div class="section-title" style="flex:1;">Licenses</div><button class="icon-btn" id="acc-refresh">${Icons.restore(18)}</button></div>
         <div id="acc-codes" style="margin-top:8px;">
-          ${(me.sparkCodes || []).map((c) => `
-            <div style="display:flex; align-items:center; padding:8px 0;">
-              <div style="flex:1;"><div class="reveal-code" data-code="${c.code}">${'•'.repeat(c.code.length)}</div><div style="font-size:12px; color:var(--ink-mute);">${c.product} · ${c.status}</div></div>
-              <button class="icon-btn" data-reveal="${c.code}">${Icons.search(16)}</button>
-            </div>
-          `).join('') || `<div style="color:var(--ink-mute);">No Spark Codes linked.</div>`}
+          ${keys.map((k) => {
+            const status = k.revoked ? 'revoked' : k.suspended ? 'suspended' : 'active';
+            const productName = (k.product && k.product.name) || 'Unknown product';
+            return `
+              <div style="display:flex; align-items:center; padding:8px 0;">
+                <div style="flex:1;"><div>${productName} — ${k.tier}</div><div style="font-size:12px; color:var(--ink-mute);">${status}${k.redeemed_at ? ' · redeemed ' + new Date(k.redeemed_at).toLocaleDateString() : ''}</div></div>
+              </div>
+            `;
+          }).join('') || `<div style="color:var(--ink-mute);">No license keys linked.</div>`}
         </div>
       </div>
     `;
 
-    el.querySelectorAll('[data-reveal]').forEach((btn) => {
-      btn.onclick = () => {
-        const codeEl = el.querySelector(`.reveal-code[data-code="${btn.dataset.reveal}"]`);
-        codeEl.textContent = codeEl.textContent.startsWith('•') ? btn.dataset.reveal : '•'.repeat(btn.dataset.reveal.length);
-      };
-    });
     document.getElementById('acc-refresh').onclick = () => render(el);
     document.getElementById('acc-rename').onclick = async () => {
       const result = await promptDialog({ title: 'Rename Account', fields: [{ id: 'username', label: 'Username', value: acc.username }] });
       if (result && result.username) Auth.api('account/me', { method: 'PATCH', body: JSON.stringify({ username: result.username }) }).then(() => render(el));
     };
     document.getElementById('acc-reset').onclick = () => {
-      Auth.api('auth/request-password-reset', { method: 'POST', body: JSON.stringify({ email: acc.email }) })
+      Auth.requestPasswordReset(acc.email)
         .then(() => Notifications.push({ icon: 'info', title: 'Reset email sent' }));
     };
     document.getElementById('acc-logout').onclick = () => Auth.logout();
@@ -79,7 +78,7 @@ const AccountScreen = (() => {
       Auth.logout();
     };
     document.getElementById('acc-delete').onclick = async () => {
-      const ok = await confirmDialog({ title: 'Delete Account?', body: 'Permanently deletes your account and all linked Spark Codes. This cannot be undone.', confirmLabel: 'Delete Account', danger: true });
+      const ok = await confirmDialog({ title: 'Delete Account?', body: 'Permanently deletes your account and all linked license keys. This cannot be undone.', confirmLabel: 'Delete Account', danger: true });
       if (!ok) return;
       await Auth.api('account/me', { method: 'DELETE' });
       await Bridge.call('settings.wipeLocalData');

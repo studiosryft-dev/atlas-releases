@@ -1,18 +1,36 @@
-/** Auth screens (Login/Signup/Spark Code) — talk to embyr-backend-keystone directly via
- *  fetch(), no native bridge involved. Session token lives in localStorage (this WebView's
- *  storage is sandboxed to the app, same trust boundary a native SessionManager would have). */
-const KEYSTONE_BASE_URL = 'https://embyr-backend-keystone.onrender.com/';
+/** Auth screens (Login/Signup/License Key) — talk to Supabase Auth directly (signup/login/
+ *  logout/password-reset) and to ryft-keystone (profile/keys) via fetch(), no native bridge
+ *  involved. Session token lives in localStorage (this WebView's storage is sandboxed to the
+ *  app, same trust boundary a native SessionManager would have). */
+const KEYSTONE_BASE_URL = 'https://ryft-keystone.onrender.com/';
+const SUPABASE_URL = 'https://vrdujtsvdmzemtosddmv.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'REPLACE_WITH_SB_PUBLISHABLE_KEY';
 
 const Auth = (() => {
   const root = document.getElementById('auth-root');
 
   function getToken() { return localStorage.getItem('atlas_token'); }
   function setSession(token) { localStorage.setItem('atlas_token', token); }
-  function clearSession() { localStorage.removeItem('atlas_token'); localStorage.removeItem('atlas_account_cache'); }
+  function clearSession() {
+    localStorage.removeItem('atlas_token');
+    localStorage.removeItem('atlas_account_cache');
+    localStorage.removeItem('atlas_access_cache');
+  }
 
   function cacheAccount(account) { localStorage.setItem('atlas_account_cache', JSON.stringify(account)); }
   function getCachedAccount() {
     try { return JSON.parse(localStorage.getItem('atlas_account_cache') || 'null'); } catch { return null; }
+  }
+
+  /** Stable per-install id — sent as deviceId/X-Device-Id so the backend's session-revocation
+   *  and login-ping/keys-redeem device tracking has something consistent to key off of. */
+  function deviceId() {
+    let id = localStorage.getItem('atlas_device_id');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('atlas_device_id', id);
+    }
+    return id;
   }
 
   async function api(path, options = {}) {
@@ -24,6 +42,7 @@ const Auth = (() => {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          'X-Device-Id': deviceId(),
           ...(options.headers || {}),
         },
       });
@@ -42,6 +61,45 @@ const Auth = (() => {
       throw e;
     }
     return body;
+  }
+
+  /** Calls Supabase Auth directly (signup/token/logout/recover) — ryft-keystone has no /auth
+   *  routes of its own; Supabase Auth owns the credential, ryft-keystone owns the profile. */
+  async function supabaseAuth(path, body, extraHeaders = {}) {
+    let res;
+    try {
+      res = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          ...extraHeaders,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (networkErr) {
+      const e = new Error('Network error — check your connection.');
+      e.isNetworkError = true;
+      throw e;
+    }
+    const respBody = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const e = new Error(respBody.error_description || respBody.msg || respBody.error || 'Something went wrong.');
+      e.status = res.status;
+      e.body = respBody;
+      throw e;
+    }
+    return respBody;
+  }
+
+  async function requestPasswordReset(email) {
+    return supabaseAuth('recover', { email });
+  }
+
+  /** Whether the calling user currently holds a non-revoked, non-suspended key for Atlas. */
+  async function hasAtlasAccess() {
+    const { keys } = await api('keys/mine');
+    return (keys || []).some((k) => k.product && k.product.slug === 'atlas' && !k.revoked && !k.suspended);
   }
 
   /** Shown synchronously the instant the app launches, before anything async (session-resume
@@ -124,9 +182,11 @@ const Auth = (() => {
       errEl.hidden = true;
       await submitWithSpinner(e.currentTarget, async () => {
         try {
-          const body = await api('auth/login', { method: 'POST', body: JSON.stringify({ email, password, deviceName: navigator.userAgent }) });
-          setSession(body.session.accessToken);
-          await proceedPastAuth(body.account);
+          const tokenResp = await supabaseAuth('token?grant_type=password', { email, password });
+          setSession(tokenResp.access_token);
+          api('account/login-ping', { method: 'POST', body: JSON.stringify({ deviceId: deviceId() }) }).catch(() => {});
+          const profile = await api('account/me');
+          await proceedPastAuth(profile);
         } catch (err) {
           errEl.textContent = err.message; errEl.hidden = false;
         }
@@ -159,13 +219,56 @@ const Auth = (() => {
       errEl.hidden = true;
       await submitWithSpinner(e.currentTarget, async () => {
         try {
-          const body = await api('auth/signup', { method: 'POST', body: JSON.stringify({ username, email, password }) });
-          if (body.session) {
-            setSession(body.session.accessToken);
-            const me = await api('account/me');
-            await proceedPastAuth(me.account);
+          const body = await supabaseAuth('signup', { email, password });
+          if (!body.access_token) {
+            // Email confirmation is required before a session is issued — nothing more to do
+            // client-side until they confirm and come back to sign in.
+            errEl.textContent = 'Check your email to confirm your account, then sign in.';
+            errEl.hidden = false;
+            setTimeout(renderLogin, 2200);
+            return;
+          }
+          setSession(body.access_token);
+          if (username) {
+            // Best-effort: a taken/invalid username shouldn't block getting into the app —
+            // the Account page's Rename flow can fix it later.
+            await api('account/me', { method: 'PATCH', body: JSON.stringify({ username }) }).catch(() => {});
+          }
+          api('account/login-ping', { method: 'POST', body: JSON.stringify({ deviceId: deviceId() }) }).catch(() => {});
+          const profile = await api('account/me');
+          await proceedPastAuth(profile);
+        } catch (err) {
+          errEl.textContent = err.message; errEl.hidden = false;
+        }
+      });
+    };
+  }
+
+  function renderLicenseKey() {
+    root.innerHTML = `
+      <div class="auth-screen">
+        <h1 class="display auth-title">Enter your License Key</h1>
+        <p class="auth-sub">Atlas is gated behind a license key (RYFT-XXXX-XXXX-XXXX-XXXX). Enter yours to continue.</p>
+        <div class="glass glass--strong auth-card">
+          <div class="field"><label>License Key</label><input id="lk-key" placeholder="RYFT-XXXX-XXXX-XXXX-XXXX" style="text-transform:uppercase"></div>
+          <div class="auth-error" id="lk-error" hidden></div>
+          <button class="btn-primary" id="lk-submit" style="width:100%; margin-top:14px;">Unlock Atlas</button>
+        </div>
+      </div>
+    `;
+    document.getElementById('lk-submit').onclick = async (e) => {
+      const key = document.getElementById('lk-key').value.trim().toUpperCase();
+      const errEl = document.getElementById('lk-error');
+      errEl.hidden = true;
+      await submitWithSpinner(e.currentTarget, async () => {
+        try {
+          await api('keys/redeem', { method: 'POST', body: JSON.stringify({ key, deviceId: deviceId() }) });
+          if (await hasAtlasAccess()) {
+            localStorage.setItem('atlas_access_cache', '1');
+            enterShell();
           } else {
-            renderLogin();
+            errEl.textContent = "That key isn't valid for Atlas.";
+            errEl.hidden = false;
           }
         } catch (err) {
           errEl.textContent = err.message; errEl.hidden = false;
@@ -174,40 +277,15 @@ const Auth = (() => {
     };
   }
 
-  function renderSparkCode() {
-    root.innerHTML = `
-      <div class="auth-screen">
-        <h1 class="display auth-title">Enter your Spark Code</h1>
-        <p class="auth-sub">Atlas is gated behind a Spark Code (SPRK-ATL-XXX-XXX-XXX). Enter yours to continue.</p>
-        <div class="glass glass--strong auth-card">
-          <div class="field"><label>Spark Code</label><input id="sc-code" placeholder="SPRK-ATL-XXX-XXX-XXX" style="text-transform:uppercase"></div>
-          <div class="auth-error" id="sc-error" hidden></div>
-          <button class="btn-primary" id="sc-submit" style="width:100%; margin-top:14px;">Unlock Atlas</button>
-        </div>
-      </div>
-    `;
-    document.getElementById('sc-submit').onclick = async (e) => {
-      const code = document.getElementById('sc-code').value.trim().toUpperCase();
-      const errEl = document.getElementById('sc-error');
-      errEl.hidden = true;
-      await submitWithSpinner(e.currentTarget, async () => {
-        try {
-          await api('spark-codes/redeem', { method: 'POST', body: JSON.stringify({ code }) });
-          enterShell();
-        } catch (err) {
-          errEl.textContent = err.message; errEl.hidden = false;
-        }
-      });
-    };
-  }
-
-  async function proceedPastAuth(account) {
-    if (account.products_owned && account.products_owned.includes('atlas')) {
-      cacheAccount(account);
-      AppStore.set({ account });
+  async function proceedPastAuth(profile) {
+    cacheAccount(profile);
+    AppStore.set({ account: profile });
+    if (await hasAtlasAccess()) {
+      localStorage.setItem('atlas_access_cache', '1');
       enterShell();
     } else {
-      renderSparkCode();
+      localStorage.removeItem('atlas_access_cache');
+      renderLicenseKey();
     }
   }
 
@@ -218,10 +296,10 @@ const Auth = (() => {
     document.dispatchEvent(new CustomEvent('atlas:authed'));
   }
 
-  /** Shown only for a genuine, confirmed revocation (account suspended/banned/deleted, or a
-   *  revoked spark code) — never for a network blip or an ordinary expired-token resume. Shows
-   *  the raw status text from the backend rather than a guessed-at message, since that's the
-   *  actual source of truth for *why*. */
+  /** Shown only for a genuine, confirmed revocation (account suspended/banned/deleted) — never
+   *  for a network blip or an ordinary expired-token resume. Shows the raw status text from the
+   *  backend rather than a guessed-at message, since that's the actual source of truth for
+   *  *why* ("Account is suspended" etc., from ryft-keystone's requireAuth middleware). */
   function renderRevoked(reasonText) {
     document.getElementById('shell-root').hidden = true;
     root.hidden = false;
@@ -259,7 +337,7 @@ const Auth = (() => {
   /** The actual fix for "I should NEVER have to sign in unless forced signed out" — runs
    *  silently against whatever's currently on screen (shell or revoked screen) instead of
    *  blocking with a spinner/login prompt. Only two outcomes ever interrupt the user:
-   *  a 403 with a suspended/banned/deleted/revoked account (renderRevoked), or a 401 meaning
+   *  a 403 with a suspended/banned/deleted account (renderRevoked), or a 401 meaning
    *  the token itself is actually invalid/expired (a real sign-out condition, not a hiccup).
    *  Everything else — no network, Render cold-start, a 500, a timeout — is swallowed and
    *  retried on the next check, leaving the user exactly where they were. */
@@ -267,9 +345,9 @@ const Auth = (() => {
     if (!getToken() || backgroundCheckInFlight) return;
     backgroundCheckInFlight = true;
     try {
-      const me = await api('account/me');
-      cacheAccount(me.account);
-      AppStore.set({ account: me.account });
+      const profile = await api('account/me');
+      cacheAccount(profile);
+      AppStore.set({ account: profile });
       if (!root.hidden && AppStore.get('authed')) {
         // Was showing the revoked screen and it just cleared — hop back into the shell.
         enterShell();
@@ -304,7 +382,7 @@ const Auth = (() => {
     if (!token) { renderLogin(); return; }
 
     const cached = getCachedAccount();
-    if (cached && cached.products_owned && cached.products_owned.includes('atlas')) {
+    if (cached && localStorage.getItem('atlas_access_cache') === '1') {
       // Instant, optimistic entry — no network round-trip blocks the UI. The real check still
       // happens, just silently in the background afterward.
       AppStore.set({ account: cached });
@@ -317,8 +395,8 @@ const Auth = (() => {
     // optimistically show, so this one time it's a real blocking check.
     renderLoading();
     try {
-      const me = await api('account/me');
-      await proceedPastAuth(me.account);
+      const profile = await api('account/me');
+      await proceedPastAuth(profile);
     } catch (e) {
       if (e.isNetworkError) {
         // Can't even reach the backend on a completely cold cache — nothing to fall back to,
@@ -334,22 +412,24 @@ const Auth = (() => {
       } else {
         // Anything else (5xx, a Render cold-start error page, a malformed response) is
         // transient, exactly like checkSessionInBackground() already treats it — NOT a reason
-        // to sign out. Previously this branch called clearSession() unconditionally, which wiped
-        // an otherwise-still-valid token on a plain server hiccup during the one-time blocking
-        // resume check (no cached account yet), permanently forcing the user back to login even
-        // though nothing was actually wrong with their session. Show login without discarding
-        // the token, so the next resume/relaunch can still succeed with it.
+        // to sign out. Show login without discarding the token, so the next resume/relaunch
+        // can still succeed with it.
         renderLogin();
       }
     }
   }
 
   function logout() {
+    const token = getToken();
     clearSession();
     document.getElementById('shell-root').hidden = true;
     root.hidden = false;
     AppStore.set({ authed: false, account: null });
     renderLogin();
+    if (token) {
+      // Best-effort server-side invalidation — local sign-out already happened above regardless.
+      supabaseAuth('logout', {}, { Authorization: `Bearer ${token}` }).catch(() => {});
+    }
   }
 
   // Belt-and-suspenders alongside the native onResume hook — covers the case where the WebView
@@ -358,5 +438,5 @@ const Auth = (() => {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkSessionInBackground(); });
   setInterval(() => { if (!document.hidden) checkSessionInBackground(); }, 15 * 60 * 1000);
 
-  return { api, tryResumeSession, logout, getToken, onAppResume };
+  return { api, tryResumeSession, logout, getToken, onAppResume, requestPasswordReset };
 })();
