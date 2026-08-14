@@ -76,6 +76,12 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = false
         }
 
+        // Lets a USB-connected desktop Chrome inspect this WebView at chrome://inspect — full
+        // console/network tabs, not just the one-line Logcat forwarding below. Debug builds only.
+        if (BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
+
         webView = WebView(this).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             setBackgroundColor(Color.parseColor("#07040F")) // matches --void background token, avoids a white flash pre-paint
