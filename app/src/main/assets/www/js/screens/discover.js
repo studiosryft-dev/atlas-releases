@@ -81,7 +81,7 @@ const DiscoverScreen = (() => {
     root.querySelector('#disc-search-btn').onclick = runSearch;
     root.querySelector('#disc-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
 
-    GlassDropdown.wire('disc-quality', QUALITY_OPTIONS, settings.audioQuality || 'MEDIUM', async (quality) => {
+    GlassDropdown.wire('disc-quality', QUALITY_OPTIONS, settings.audioQuality || 'HIGH', async (quality) => {
       AppStore.set({ settings: { ...AppStore.get('settings'), audioQuality: quality } });
       await Bridge.call('settings.setAudioQuality', { quality });
     });

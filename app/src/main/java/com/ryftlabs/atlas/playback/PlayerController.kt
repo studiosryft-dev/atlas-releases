@@ -26,10 +26,13 @@ data class PlaybackUiState(
     val isPlaying: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
-    /** 0 = off, 1 = repeat the current track exactly once then continue, 2 = repeat the current
-     *  track indefinitely. See [PlayerController.setRepeatMode] for why "once" is hand-rolled
-     *  instead of using an ExoPlayer native repeat mode (there isn't one for "repeat exactly
-     *  once" — only off/one-forever/whole-playlist). */
+    /** 0 = off (default — nothing repeats), 1 = "Repeat Once" (every track plays twice before the
+     *  queue advances), 2 = "Repeat Twice" (every track plays three times), 3 = "Loop" (the
+     *  current track repeats forever, queue never advances). Toggle buttons in the UI, not a
+     *  radio group — tapping the already-active one sends mode back to 0. See
+     *  [PlayerController.setRepeatMode] for why 1/2 are hand-rolled instead of an ExoPlayer
+     *  native repeat mode (there isn't one for "repeat exactly N times" — only
+     *  off/one-forever/whole-playlist). */
     val repeatMode: Int = 0,
 )
 
@@ -48,16 +51,35 @@ class PlayerController(private val context: Context) {
     private var currentQueue: List<TrackEntity> = emptyList()
     private var currentPlaylistContextId: String? = null
 
-    // "Repeat Once" (mode 1) is tracked ourselves rather than via any ExoPlayer native repeat
-    // mode — Media3 only offers off / repeat-this-item-forever / repeat-whole-playlist, none of
-    // which is "replay this one track exactly one extra time, then carry on." Keyed by mediaId
-    // (not index — indices shift under reordering) so a track that's already had its one replay
-    // doesn't loop forever if it happens to end naturally a second time before the user moves on.
-    private var repeatOnceConsumedForId: String? = null
+    // Counts REPEAT_MODE_ONE loops of the current item against Repeat Once/Twice's target (see
+    // attachListener's onMediaItemTransition) — reset to 0 on every item transition, so it's
+    // always scoped to whatever's playing right now, not any specific track id.
+    private var repeatReplaysDone: Int = 0
 
+    /**
+     * A genuine (if intermittent) cause of "the mini player/Now Playing button gets stuck showing
+     * Play while music keeps playing, and the lock-screen/notification widget stops updating or
+     * disappears" — PlaybackService is a foreground service, which protects it from *routine*
+     * memory-pressure kills, but not from aggressive OEM battery-optimization task killers
+     * (Xiaomi/OnePlus/Samsung and others are notorious for this specifically with background
+     * media services) or a genuine low-memory kill under real pressure. Without a
+     * MediaController.Listener, a dropped connection like that was previously silent: `controller`
+     * kept pointing at a MediaController that would never receive another callback, freezing
+     * `_state` at whatever it last was — forever, from the UI's point of view, until the user
+     * force-closed and reopened the app. onDisconnected now triggers an automatic reconnect
+     * attempt instead, so the app self-heals (a fresh MediaController, a fresh notification) the
+     * next time anything asks it to.
+     */
     fun connect(onReady: () -> Unit = {}) {
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val future = MediaController.Builder(context, sessionToken).buildAsync()
+        val builder = MediaController.Builder(context, sessionToken)
+            .setListener(object : MediaController.Listener {
+                override fun onDisconnected(controller: MediaController) {
+                    this@PlayerController.controller = null
+                    connect(onReady)
+                }
+            })
+        val future = builder.buildAsync()
         future.addListener({
             controller = future.get().also { attachListener(it) }
             onReady()
@@ -89,23 +111,58 @@ class PlayerController(private val context: Context) {
                 )
             }
 
+            /** isPlaying is included here too, not just in the dedicated onIsPlayingChanged
+             *  below — self-healing against the "stuck showing Play while it's actually playing"
+             *  bug. onEvents fires on essentially every player event batch (way more often than
+             *  just play/pause toggles), so even if some unusual command sequence — a crossfade
+             *  cutover, a repeat-mode loop, a rapid pause/resume — ever caused a single
+             *  onIsPlayingChanged call to be missed or misordered, the very next tick re-reads
+             *  the player's real, current isPlaying and corrects it, rather than the UI staying
+             *  wrong indefinitely until some future play/pause event happens to fire correctly. */
             override fun onEvents(player: Player, events: Player.Events) {
                 _state.value = _state.value.copy(
+                    isPlaying = player.isPlaying,
                     positionMs = player.currentPosition.coerceAtLeast(0),
                     durationMs = player.duration.coerceAtLeast(0),
                 )
             }
 
-            /** The hook "Repeat Once" runs on — [reason] is AUTO_TRANSITION only when a track
-             *  ended naturally and the player advanced on its own (never for a manual skip/seek/
-             *  previous), which is exactly the one case this feature cares about. */
-            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
-                if (reason != Player.DISCONTINUITY_REASON_AUTO_TRANSITION) return
-                if (_state.value.repeatMode != 1) return
-                val finishedId = oldPosition.mediaItem?.mediaId ?: return
-                if (finishedId == repeatOnceConsumedForId) return // already had its one replay
-                repeatOnceConsumedForId = finishedId
-                controller.seekTo(oldPosition.mediaItemIndex, 0L)
+            /** Repeat Once/Twice/Loop all run on real ExoPlayer REPEAT_MODE_ONE now — the
+             *  previous design left the player's own repeatMode at OFF for modes 1/2 and instead
+             *  waited for a genuine DISCONTINUITY_REASON_AUTO_TRANSITION to hijack, but ExoPlayer
+             *  only ever fires that when there's a real *next* item to auto-advance to. On the
+             *  last (or only) track in the queue it just stops instead — no transition event of
+             *  any kind — so the repeat logic silently never triggered at all for exactly the
+             *  case a listener is most likely to want it (finishing out the queue, or a single
+             *  Library track). REPEAT_MODE_ONE has no such requirement; it loops the current item
+             *  regardless of what else is (or isn't) queued after it, and reports each loop via
+             *  onMediaItemTransition's own REPEAT reason — which is what this now counts against
+             *  the target replay count instead. */
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val mode = _state.value.repeatMode
+                when (reason) {
+                    Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> {
+                        // REPEAT_MODE_ONE just looped the current item back to its own start.
+                        // Mode 3 (Loop) needs nothing further — keep looping forever. Modes 1/2
+                        // count this loop against their target; once used up, drop the *player's*
+                        // repeatMode back to OFF so the item's next natural end actually advances
+                        // the queue instead of looping yet again.
+                        if (mode == 1 || mode == 2) {
+                            repeatReplaysDone++
+                            if (repeatReplaysDone >= mode) controller.repeatMode = Player.REPEAT_MODE_OFF
+                        }
+                    }
+                    Player.MEDIA_ITEM_TRANSITION_REASON_AUTO,
+                    Player.MEDIA_ITEM_TRANSITION_REASON_SEEK -> {
+                        // Landed on a (possibly new) item — re-arm for whatever mode is currently
+                        // selected, fresh replay budget. Covers a genuine auto-advance, a manual
+                        // skip/previous, and the crossfade cutover (PlayerController.seekTo/
+                        // CrossfadeController's own primary.seekTo) alike.
+                        repeatReplaysDone = 0
+                        controller.repeatMode = if (mode in 1..3) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+                    }
+                    else -> Unit
+                }
             }
         })
     }
@@ -138,14 +195,13 @@ class PlayerController(private val context: Context) {
 
     fun pause() = controller?.pause()
 
-    /** 0 = off, 1 = repeat current track once, 2 = repeat current track indefinitely. Mode 2
-     *  delegates straight to ExoPlayer's own REPEAT_MODE_ONE; mode 1 is hand-rolled (see
-     *  onPositionDiscontinuity above), so the underlying player itself stays REPEAT_MODE_OFF for
-     *  both 0 and 1 — only our own state field distinguishes them. */
+    /** 0 = off, 1 = Repeat Once, 2 = Repeat Twice, 3 = Loop. All three non-zero modes run on real
+     *  ExoPlayer REPEAT_MODE_ONE (see attachListener's onMediaItemTransition for how 1/2 count
+     *  loops and drop back to OFF once their budget's used, vs. 3 which never does). */
     fun setRepeatMode(mode: Int) {
         _state.value = _state.value.copy(repeatMode = mode)
-        repeatOnceConsumedForId = null // switching modes re-arms a possible replay for whatever's playing now
-        controller?.repeatMode = if (mode == 2) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        repeatReplaysDone = 0 // fresh replay budget for whatever's playing right now
+        controller?.repeatMode = if (mode in 1..3) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
 
     fun skipNext() = controller?.seekToNextMediaItem()

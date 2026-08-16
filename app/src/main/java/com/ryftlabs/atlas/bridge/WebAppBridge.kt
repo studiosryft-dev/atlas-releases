@@ -302,6 +302,7 @@ class WebAppBridge(
             val playlistContextId = args.optString("playlistContextId", "").ifBlank { null }
             val tracks = ids.mapNotNull { trackDao.findById(it) }
             queueManager.playQueue(tracks, startIndex, playlistContextId)
+            playlistContextId?.let { playlistDao.incrementPlayCount(it) }
             null
         }
         "playback.playShuffled" -> {
@@ -309,6 +310,7 @@ class WebAppBridge(
             val playlistContextId = args.optString("playlistContextId", "").ifBlank { null }
             val tracks = ids.mapNotNull { trackDao.findById(it) }
             queueManager.playShuffled(tracks, playlistContextId)
+            playlistContextId?.let { playlistDao.incrementPlayCount(it) }
             null
         }
         "playback.togglePlayPause" -> { playerController.togglePlayPause(); null }

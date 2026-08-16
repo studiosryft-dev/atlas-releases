@@ -123,6 +123,13 @@ function attachIndexedPageSwipeDismiss(page, name) {
       if (gesture.axis === 'x') { gesture = null; return; } // leave it to native scroll entirely
     }
     e.preventDefault(); // committed to owning this gesture — cancels native scroll for it
+    // .is-dragging (layout.css) drops backdrop-filter on every .glass descendant for as long as
+    // the drag is live. A page like Notification Center can have a dozen-plus individually
+    // blurred cards/buttons on screen at once; re-compositing that many backdrop-filter regions
+    // every single touchmove frame while the whole page is also being transformed is what was
+    // actually showing up as fast flicker/stutter during the drag — not an animation bug, a
+    // paint-cost one. Blur isn't visually needed while the content itself is sliding anyway.
+    page.classList.add('is-dragging');
     page.style.transition = 'none';
     page.style.transform = `translateY(${Math.min(dy, window.innerHeight)}px)`;
   }, { passive: false });
@@ -133,6 +140,14 @@ function attachIndexedPageSwipeDismiss(page, name) {
     const t = e.changedTouches && e.changedTouches[0];
     const dy = wasTracking && t ? t.clientY - gesture.startY : 0;
     gesture = null;
+    // Blur comes back the instant the finger lifts, BEFORE either animation below even starts —
+    // not after. The flicker this is guarding against only ever came from the live drag itself
+    // (many rapid JS-driven transform writes on every touchmove); the exit/snap-back below is one
+    // continuous browser-managed CSS transition, not a per-frame cost problem, so there's no
+    // reason to keep blur suppressed through it — doing so just made it "snap" back on abruptly
+    // once the animation finished, which read as worse than the flicker it was fixing. Blur now
+    // stays fully rendered for the entire exit animation, exactly as it looked before any of this.
+    page.classList.remove('is-dragging');
     if (!wasTracking) return;
     if (dy > DISMISS_THRESHOLD) {
       page.style.transition = `transform ${EXIT_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
@@ -254,6 +269,11 @@ function attachPageSwipeNav() {
 function renderMiniPlayer() {
   const state = AppStore.get('playbackState');
   const el = document.getElementById('mini-player');
+  // Single source of truth for "give scrollable tab content extra bottom clearance for the mini
+  // player" — #page-container.is-mini-player-visible .page-slide, layout.css — read by every
+  // native tab uniformly. Used to be duplicated per-screen (Library ran its own copy scoped to
+  // its embedded-scroll widget), which silently double-stacked once this one was introduced.
+  document.getElementById('page-container')?.classList.toggle('is-mini-player-visible', !!(state && state.title));
   if (!state || !state.title) { el.classList.remove('is-visible'); el.innerHTML = ''; return; }
   el.classList.add('is-visible');
   el.innerHTML = `
@@ -270,7 +290,18 @@ function renderMiniPlayer() {
   el.onclick = () => openIndexedPage('nowPlaying', NowPlayingScreen.render);
 }
 
+// enterShell() can legitimately fire 'atlas:authed' more than once in a single page load — e.g.
+// checkSessionInBackground's background account/me check can resolve while #auth-root is still
+// mid-exit-animation (the ~440ms window in auth.js's enterShell) and, seeing the auth root still
+// technically visible, calls enterShell() a second time. Without this guard, a second initShell()
+// run doesn't just re-schedule Onboarding.start() a second time (the walkthrough overlapping
+// itself, unable to be dismissed) — it also re-adds duplicate Bridge.on('playback.state', ...)
+// listeners etc. So the fix belongs here, at the source, not just in Onboarding.
+let shellInitialized = false;
 async function initShell() {
+  if (shellInitialized) return;
+  shellInitialized = true;
+
   Router.register('library', LibraryScreen.render);
   Router.register('playlists', PlaylistsScreen.render);
   Router.register('settings', SettingsScreen.render);
@@ -286,7 +317,11 @@ async function initShell() {
 
   Bridge.call('settings.get').then((s) => {
     AppStore.set({ settings: s });
-    document.documentElement.setAttribute('data-colorway', s.colorway);
+    // Dynamic mode still needs a real colorway underneath as the fallback shown before any
+    // track/artwork is available — 'pulse' (the app's own default) rather than leaving the
+    // attribute unset, which would fall back to the @property initial-values in backgrounds.css.
+    document.documentElement.setAttribute('data-colorway', s.colorway === 'dynamic' ? 'pulse' : s.colorway);
+    DynamicColorway.setEnabled(s.colorway === 'dynamic');
     SettingsScreen.applyAppearance(s.themeMode);
     WavesBackground.setEnabled(s.backgroundAnimationEnabled !== false);
     WavesBackground.setSpeed(s.backgroundAnimationSpeed || 1);
@@ -307,6 +342,11 @@ async function initShell() {
   AppStore.set({ library, playlists });
 
   navigateTo('library');
+
+  // Let the shell's own entrance animation (enterShell's slide-up, plus the nav pill settling
+  // into position) finish before measuring element rects for the spotlight, or the very first
+  // step would highlight stale/pre-layout coordinates.
+  setTimeout(() => Onboarding.start(), 520);
 }
 
 document.addEventListener('atlas:authed', initShell);

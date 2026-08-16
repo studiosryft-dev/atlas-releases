@@ -121,7 +121,16 @@ const NowPlayingScreen = (() => {
     Bridge.call('playback.getSleepTimer').then((t) => { sleepEndsAtMs = t?.endsAtMs || null; refreshSleepButton(); }).catch(() => {});
 
     startTicker();
-    syncVisualizerToPlaybackState();
+    // NOT syncVisualizerToPlaybackState() here — that gates on isOpen(), which checks the
+    // .indexed-page's own .is-open class, and app.js's openIndexedPage() calls this render()
+    // synchronously BEFORE adding that class (it's applied one requestAnimationFrame later, to
+    // let the enter transition start from the closed state). Checking isOpen() at this exact
+    // point always sees "not open yet" and stops the visualizer instead of starting it — and
+    // since native only pushes a fresh playback.state on real player events (not a steady tick),
+    // nothing reliably re-triggers it afterward. This code path already knows the page is being
+    // opened right now, so it acts on isPlayingLocal directly instead of re-deriving that through
+    // a DOM check that isn't true yet.
+    if (isPlayingLocal) startVisualizerCapture(); else stopVisualizerCapture();
   }
 
   // Registered once at module load — same "check .is-open before touching the DOM" pattern
@@ -149,19 +158,18 @@ const NowPlayingScreen = (() => {
     closeIndexedPage('nowPlaying');
   }
 
-  let lastColorUrl = null;
+  // --np-accent is a pure CSS alias to --bg-1 (nowPlaying.css) — the same colorway/Dynamic
+  // accent every other colorway-aware element already reads — so there's nothing to compute or
+  // set here beyond the background image itself. This used to also run an independent
+  // AlbumColor.extract() pass to derive --np-accent from the artwork directly, which is exactly
+  // what caused it to drift out of sync with the actual selected colorway (a separately-computed
+  // value racing against, and not necessarily matching, whatever the colorway system already
+  // had).
   function applyBg(artworkPath) {
     const bg = document.getElementById('np-bg');
     if (!bg) return;
     const url = artworkPath ? artworkUrl(artworkPath) : null;
     bg.style.backgroundImage = url ? `url('${url}')` : 'none';
-    if (url === lastColorUrl) return;
-    lastColorUrl = url;
-    if (!url) return;
-    AlbumColor.extract(url).then((color) => {
-      if (!color || url !== lastColorUrl) return; // track changed again before this resolved
-      document.querySelector('.np-shell')?.style.setProperty('--np-accent', color);
-    });
   }
 
   function startTicker() {
@@ -209,7 +217,11 @@ const NowPlayingScreen = (() => {
     const track = findTrack(state.currentTrackId);
     panel.dataset.trackId = state.currentTrackId || '';
     const liked = track?.liked || false;
-    const quality = (state.qualityLabel || track?.qualityLabel || 'MEDIUM');
+    // The app-wide default download quality (same value Discover's/Settings' own pickers show
+    // and set via settings.setAudioQuality) — this control is a shortcut to that global setting,
+    // not a readout of whatever quality the currently-playing track happens to have already been
+    // downloaded at, which (once downloaded) can never change from here or anywhere else.
+    const quality = (AppStore.get('settings')?.audioQuality || 'HIGH');
 
     panel.innerHTML = `
       <div class="np-topbar">
@@ -251,7 +263,15 @@ const NowPlayingScreen = (() => {
       </div>
       <div class="np-time-row">
         <span id="np-time-current">${fmtTime(localPositionMs)}</span>
-        <span class="np-quality">${Icons.waveform(14)} ${quality}</span>
+        <div class="np-quality-wrap" id="np-quality-wrap">
+          <button class="np-quality" id="np-quality-btn" type="button">
+            <span class="icon-morph-btn np-quality-icon" id="np-quality-icon">
+              <span class="icon-morph-icon icon-morph-icon--a">${Icons.waveform(14)}</span>
+              <span class="icon-morph-icon icon-morph-icon--b">${Icons.close(14)}</span>
+            </span>
+            <span id="np-quality-label">${qualityLabel(quality)}</span>
+          </button>
+        </div>
         <span id="np-time-total">${fmtTime(state.durationMs)}</span>
       </div>
 
@@ -261,9 +281,9 @@ const NowPlayingScreen = (() => {
         <button class="icon-btn" id="np-next">${Icons.next(30)}</button>
       </div>
       <div class="np-repeat-row" id="np-repeat-row">
-        <button class="np-repeat-btn" data-mode="0" title="No Repeat">${Icons.repeatOff(20)}</button>
-        <button class="np-repeat-btn" data-mode="1" title="Repeat Once">${Icons.repeatOnce(20)}</button>
-        <button class="np-repeat-btn" data-mode="2" title="Repeat">${Icons.repeat(20)}</button>
+        <button class="np-repeat-btn" data-mode="1">${Icons.repeatOnce(20)}<span>Repeat Once</span></button>
+        <button class="np-repeat-btn" data-mode="2">${Icons.repeatTwice(20)}<span>Repeat Twice</span></button>
+        <button class="np-repeat-btn" data-mode="3">${Icons.repeat(20)}<span>Loop</span></button>
       </div>
 
       <div class="np-action-row">
@@ -284,14 +304,19 @@ const NowPlayingScreen = (() => {
     panel.querySelector('#np-next').onclick = () => Bridge.call('playback.next');
     panel.querySelector('#np-prev').onclick = () => Bridge.call('playback.previous');
 
+    // Real toggles, not a radio group — tapping the already-active mode turns repeat back off
+    // (mode 0) rather than staying selected. Default is mode 0 (nothing active) with no explicit
+    // "off" button on screen at all; off is just the state all three buttons agree on together.
     const repeatRow = panel.querySelector('#np-repeat-row');
     const state0 = AppStore.get('playbackState') || {};
     repeatRow.querySelectorAll('.np-repeat-btn').forEach((btn) => {
       btn.classList.toggle('is-active', Number(btn.dataset.mode) === (state0.repeatMode || 0));
       btn.onclick = () => {
-        const mode = Number(btn.dataset.mode);
-        repeatRow.querySelectorAll('.np-repeat-btn').forEach((b) => b.classList.toggle('is-active', b === btn));
-        Bridge.call('playback.setRepeatMode', { mode });
+        const clicked = Number(btn.dataset.mode);
+        const current = AppStore.get('playbackState')?.repeatMode || 0;
+        const next = current === clicked ? 0 : clicked;
+        repeatRow.querySelectorAll('.np-repeat-btn').forEach((b) => b.classList.toggle('is-active', Number(b.dataset.mode) === next));
+        Bridge.call('playback.setRepeatMode', { mode: next });
       };
     });
     panel.querySelector('#np-like').onclick = () => {
@@ -344,6 +369,8 @@ const NowPlayingScreen = (() => {
       };
     });
 
+    wireQualityMenu(panel);
+
     // Seek bar — drag anywhere on the track, live preview while dragging, commits on release.
     const seek = panel.querySelector('#np-seek');
     seek.addEventListener('pointerdown', (e) => beginSeekDrag(e, seek));
@@ -352,6 +379,54 @@ const NowPlayingScreen = (() => {
     panel.querySelector('#np-act-eq').onclick = () => openEqualizerSheet(track);
     panel.querySelector('#np-act-sleep').onclick = (e) => openSleepPopup(e.currentTarget);
     panel.querySelector('#np-act-queue').onclick = () => openQueueSheet();
+  }
+
+  /** Download-quality picker — same glassmorphism dropdown language as the 3-dot menu
+   *  (.np-dropdown fade/slide open-close, icon-morph trigger) but its own slightly larger,
+   *  centered variant (.np-quality-dropdown) sized for 3 short, easy-to-tap options rather than
+   *  a list of icon+label actions. Controls the app-wide default download quality — the same
+   *  setting Discover's and Settings' own pickers read/write — not anything about the currently
+   *  playing track's own (fixed, already-downloaded-at) quality. */
+  function wireQualityMenu(panel) {
+    const wrap = panel.querySelector('#np-quality-wrap');
+    const trigger = panel.querySelector('#np-quality-btn');
+    const icon = panel.querySelector('#np-quality-icon');
+    if (!wrap || !trigger) return;
+
+    let menu = null;
+    const closeMenu = () => {
+      if (!menu) return;
+      const m = menu;
+      menu = null;
+      icon.classList.remove('is-open');
+      document.removeEventListener('click', closeMenu);
+      m.classList.add('is-closing');
+      setTimeout(() => m.remove(), 180);
+    };
+    trigger.onclick = (e) => {
+      e.stopPropagation();
+      if (menu) { closeMenu(); return; }
+      const current = AppStore.get('settings')?.audioQuality || 'HIGH';
+      menu = document.createElement('div');
+      menu.className = 'glass glass--strong np-quality-dropdown';
+      menu.innerHTML = QUALITY_OPTIONS.map((o) => `
+        <button type="button" class="np-quality-dropdown__item ${o.value === current ? 'is-selected' : ''}" data-value="${o.value}">${o.label}</button>
+      `).join('');
+      wrap.appendChild(menu);
+      icon.classList.add('is-open');
+      setTimeout(() => document.addEventListener('click', closeMenu), 0);
+
+      menu.querySelectorAll('[data-value]').forEach((item) => {
+        item.onclick = async (e2) => {
+          e2.stopPropagation();
+          const quality = item.dataset.value;
+          closeMenu();
+          panel.querySelector('#np-quality-label').textContent = qualityLabel(quality);
+          AppStore.set({ settings: { ...AppStore.get('settings'), audioQuality: quality } });
+          await Bridge.call('settings.setAudioQuality', { quality });
+        };
+      });
+    };
   }
 
   async function promptRename(track) {

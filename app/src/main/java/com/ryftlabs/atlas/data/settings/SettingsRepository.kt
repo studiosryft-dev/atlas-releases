@@ -122,7 +122,7 @@ class SettingsRepository(private val context: Context) {
     val wifiOnly: Flow<Boolean> = context.dataStore.data.map { it[Keys.WIFI_ONLY] ?: false }
 
     val audioQuality: Flow<AudioQuality> = context.dataStore.data.map { prefs ->
-        prefs[Keys.AUDIO_QUALITY]?.let { runCatching { AudioQuality.valueOf(it) }.getOrNull() } ?: AudioQuality.MEDIUM
+        prefs[Keys.AUDIO_QUALITY]?.let { runCatching { AudioQuality.valueOf(it) }.getOrNull() } ?: AudioQuality.HIGH
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->

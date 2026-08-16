@@ -17,6 +17,11 @@ data class PlaylistEntity(
     val animated: Boolean = true,
     val createdAt: Long,
     val sortOrder: Long = 0L,
+    /** Bumped once per Play/Shuffle from the Playlist Detail screen (see WebAppBridge's
+     *  playback.playQueue/playShuffled — only when a playlistContextId is present), not per
+     *  track — playing the same playlist through to the end counts once, matching what "times
+     *  played" means to a listener rather than a raw per-track play tally. */
+    val playCount: Long = 0L,
 ) {
     companion object {
         const val DEFAULT_PRESET = "aurora"

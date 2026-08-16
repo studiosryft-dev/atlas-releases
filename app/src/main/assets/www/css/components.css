@@ -46,7 +46,11 @@
   /* Colorway-driven tint (--bg-1) instead of a fixed --ice baby-blue, matching the same fix
      applied to the bottom nav's active-tab color. */
   background: color-mix(in srgb, var(--bg-1) 14%, transparent);
-  color: var(--bg-1);
+  /* Brightened well past the raw colorway accent — several colorways (pulse's violet especially)
+     are dark enough on their own that using --bg-1 directly here read as a near-invisible icon
+     against the tinted badge behind it. Mixing toward white keeps the colorway's hue identity
+     while guaranteeing real contrast regardless of how dark that hue's --bg-1 value is. */
+  color: color-mix(in srgb, var(--bg-1) 55%, white);
 }
 .accordion-header__text { flex: 1; min-width: 0; }
 .accordion-header__title { font-family: var(--font-display); font-weight: 700; font-size: 15px; }
@@ -185,10 +189,14 @@
   border-radius: var(--glass-radius-md);
   /* Tinted glass, not a solid saturated gradient blob — consistent with "liquid glass
      throughout" and dialed back from the old full-saturation neon-pink-glow version per
-     explicit feedback that buttons looked bad/too bright. Brand-color-tinted but restrained. */
+     explicit feedback that buttons looked bad/too bright. Brand-color-tinted but restrained.
+     Tied to the active colorway (--bg-1/--bg-2, same custom properties backgrounds.css's wave
+     layers read) instead of a fixed blue/purple, so every primary button — Play/Shuffle, Sign
+     In, Download Track, etc. — retints with the rest of the app on a colorway switch, including
+     Dynamic's live per-track palette. */
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%),
-    linear-gradient(135deg, rgba(51, 70, 214, 0.4), rgba(138, 47, 217, 0.4));
+    linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 55%, transparent), color-mix(in srgb, var(--bg-1) 55%, transparent));
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -197,7 +205,7 @@
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 15px;
-  transition: transform var(--dur-fast) var(--ease-swift), box-shadow var(--dur-fast) var(--ease-swift), opacity var(--dur-fast);
+  transition: transform var(--dur-fast) var(--ease-swift), box-shadow var(--dur-fast) var(--ease-swift), opacity var(--dur-fast), background var(--dur-medium) var(--ease-standard);
 }
 .btn-primary:active { transform: scale(0.965); }
 .btn-primary:disabled { opacity: 0.4; pointer-events: none; }
@@ -303,8 +311,9 @@
 }
 .chip.is-selected {
   color: var(--ink);
-  background: linear-gradient(135deg, rgba(51, 70, 214, 0.32), rgba(138, 47, 217, 0.32));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 45%, transparent), color-mix(in srgb, var(--bg-1) 45%, transparent));
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+  transition: background var(--dur-medium) var(--ease-standard);
 }
 
 /* ============================================================
@@ -326,14 +335,13 @@
 .embedded-scroll-frame--widget {
   border-radius: var(--glass-radius-lg);
   padding: 4px 0;
-  /* Two resting positions, smoothly connected: a small gap above the bottom nav normally, and
-     enough extra clearance to sit above the mini player (see #mini-player in layout.css —
-     roughly its own 18px offset + ~56px height) once one is actually showing. Toggled via
-     .is-mini-player-visible in library.js, kept in sync with playback state. */
+  /* Small resting gap above the bottom nav. Mini-player clearance itself is handled one level up
+     (#page-container.is-mini-player-visible .page-slide, layout.css) — this widget used to run
+     its own separate copy of that same mechanism (an .is-mini-player-visible variant bumping
+     margin-bottom to 78px), which double-stacked with the outer one once that was added instead
+     of superseding it. */
   margin-bottom: 8px;
-  transition: margin-bottom var(--dur-slow) var(--ease-standard);
 }
-.embedded-scroll-frame--widget.is-mini-player-visible { margin-bottom: 78px; }
 .embedded-scroll-frame--widget .embedded-scroll { inset: 4px 4px; padding-right: 8px; }
 /* Native scrollbars don't respect a parent's border-radius — right at the top/bottom of a
    scroll, the thumb's straight rectangular ends would visibly poke out past the frame's rounded
@@ -589,8 +597,8 @@
   to { opacity: 1; }
 }
 @keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(51, 70, 214, 0.3); }
-  50% { box-shadow: 0 0 0 8px rgba(51, 70, 214, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bg-1) 30%, transparent); }
+  50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--bg-1) 0%, transparent); }
 }
 @keyframes wiggle {
   0%, 100% { transform: rotate(-0.6deg) scale(1.02); }
@@ -745,9 +753,9 @@
   position: fixed;
   inset: 0;
   z-index: 205;
-  background: rgba(0, 0, 0, 0.5);
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: var(--modal-blur);
+  backdrop-filter: var(--modal-blur);
   animation: fadeIn var(--dur-fast) var(--ease-standard);
   transition: opacity var(--dur-fast) var(--ease-standard);
 }
@@ -790,12 +798,12 @@
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0, 0, 0, 0.45);
-  /* A very slight blur on top of the dim, not just the dim alone — makes it easier to tell the
-     popup apart from the page underneath at a glance, especially over busy/detailed screens,
-     without being heavy enough to read as a distinct visual effect of its own. */
-  -webkit-backdrop-filter: blur(2px);
-  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.55);
+  /* A real blur on top of the dim, not just a token amount — anything the user actually has to
+     read/interact with (rename, confirm, action sheets) needs the page underneath clearly
+     unreadable, not just slightly softened, or the two layers visually run together. */
+  -webkit-backdrop-filter: var(--modal-blur);
+  backdrop-filter: var(--modal-blur);
   animation: fadeIn var(--dur-fast) var(--ease-standard);
   transition: opacity var(--dur-fast) var(--ease-standard);
 }
@@ -973,3 +981,84 @@
 }
 .atp-row.is-added .atp-row__check { opacity: 1; transform: scale(1); }
 .atp-row.is-added .atp-row__name { color: var(--ice); }
+
+/* ============================================================
+   First-launch onboarding — js/onboarding.js. A single .ob-spotlight
+   div does the dark-scrim-with-a-hole effect via its own oversized
+   box-shadow spread rather than an SVG mask; moving it between steps
+   is one left/top/width/height transition. Sits above everything
+   (z-index 400, above even the equalizer/modal layer at 300) since it
+   points at real chrome across native tabs AND an indexed page.
+   ============================================================ */
+#onboarding-root {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-medium) var(--ease-standard);
+}
+#onboarding-root.is-visible { opacity: 1; pointer-events: auto; }
+
+.ob-spotlight {
+  position: absolute;
+  border-radius: 18px;
+  box-shadow: 0 0 0 9999px rgba(4, 6, 16, 0.82);
+  transition: left 460ms var(--ease-standard), top 460ms var(--ease-standard),
+              width 460ms var(--ease-standard), height 460ms var(--ease-standard);
+}
+.ob-spotlight.is-active { box-shadow: 0 0 0 9999px rgba(4, 6, 16, 0.82), 0 0 0 2px var(--ice); }
+.ob-spotlight.is-active::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 2px solid var(--ice);
+  opacity: 0.65;
+  animation: obPulse 1.6s ease-out infinite;
+}
+@keyframes obPulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.16); opacity: 0; }
+}
+
+.ob-skip {
+  position: absolute;
+  top: calc(var(--safe-top) + 16px);
+  right: 16px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03)),
+    var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur-strong);
+  backdrop-filter: var(--glass-blur-strong);
+  box-shadow: inset 0 0 0 1px var(--glass-edge-soft);
+  color: var(--ink-mute);
+  font-size: 13px;
+  font-weight: 600;
+  transition: transform var(--dur-fast) var(--ease-swift);
+}
+.ob-skip:active { transform: scale(0.93); }
+
+.ob-card {
+  position: absolute;
+  padding: 20px;
+  transition: left 460ms var(--ease-standard), top 460ms var(--ease-standard), transform 460ms var(--ease-standard);
+}
+.ob-card__dots { display: flex; gap: 6px; margin-bottom: 12px; }
+.ob-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--glass-edge);
+  transition: background var(--dur-fast), transform var(--dur-fast);
+}
+.ob-dot.is-active { background: var(--ice); transform: scale(1.5); }
+.ob-card__title { font-size: 18px; font-weight: 700; margin-bottom: 6px; animation: obFadeIn 320ms var(--ease-standard); }
+.ob-card__body { font-size: 13.5px; color: var(--ink-dim); line-height: 1.45; margin-bottom: 16px; animation: obFadeIn 320ms var(--ease-standard) 40ms both; }
+.ob-card__next { width: 100%; }
+@keyframes obFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}

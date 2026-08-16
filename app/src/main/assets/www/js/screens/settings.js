@@ -11,7 +11,7 @@ function applyPerfMode(on) {
 }
 
 const SettingsScreen = (() => {
-  const COLORWAYS = ['crimson', 'vapor', 'tide', 'pulse', 'sunset', 'lagoon', 'cosmic'];
+  const COLORWAYS = ['crimson', 'vapor', 'tide', 'pulse', 'sunset', 'lagoon', 'cosmic', 'dynamic'];
   const openSections = new Set(); // persists across re-renders within a session
 
   function accordionIcon(name) {
@@ -134,12 +134,12 @@ const SettingsScreen = (() => {
         </div>
       </div>
       <div class="divider"></div>
-      <div style="display:flex; align-items:center;">
-        <div style="flex:1;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="flex:1; min-width:0;">
           <div>Phone Heat Optimization</div>
-          <div class="track-row__subtitle" style="margin-top:2px;">Reduces blur and background animation to lower rendering load</div>
+          <div class="track-row__subtitle" style="margin-top:2px; white-space:normal; overflow:visible; text-overflow:clip;">Reduces blur and background animation to lower rendering load</div>
         </div>
-        <div class="switch ${settings.phoneHeatOptimization ? 'is-on' : ''}" id="s-perf-mode"></div>
+        <div class="switch ${settings.phoneHeatOptimization ? 'is-on' : ''}" id="s-perf-mode" style="flex-shrink:0;"></div>
       </div>
     `;
 
@@ -213,7 +213,7 @@ const SettingsScreen = (() => {
       await Bridge.call('settings.setBackgroundAnimationSpeed', { speed: v });
     };
 
-    GlassDropdown.wire('s-quality', QUALITY_OPTIONS, settings.audioQuality || 'MEDIUM', async (quality) => {
+    GlassDropdown.wire('s-quality', QUALITY_OPTIONS, settings.audioQuality || 'HIGH', async (quality) => {
       AppStore.set({ settings: { ...AppStore.get('settings'), audioQuality: quality } });
       await Bridge.call('settings.setAudioQuality', { quality });
     });
@@ -249,9 +249,22 @@ const SettingsScreen = (() => {
     el.querySelectorAll('[data-colorway-pick]').forEach((btn) => {
       btn.onclick = async () => {
         el.querySelectorAll('[data-colorway-pick]').forEach((b) => b.classList.toggle('is-selected', b === btn));
-        document.documentElement.setAttribute('data-colorway', btn.dataset.colorwayPick);
-        AppStore.set({ settings: { ...AppStore.get('settings'), colorway: btn.dataset.colorwayPick } });
-        await Bridge.call('settings.setColorway', { colorway: btn.dataset.colorwayPick });
+        const picked = btn.dataset.colorwayPick;
+        if (picked === 'dynamic') {
+          DynamicColorway.setEnabled(true);
+        } else {
+          // Attribute set BEFORE disabling Dynamic, not after: setEnabled(false) clears Dynamic's
+          // inline --bg-* overrides and immediately retints from whatever data-colorway currently
+          // resolves to. Setting the attribute first means that retint already lands on the real
+          // target colorway; the other order retinted against the stale previous data-colorway
+          // value (still "pulse", Dynamic's own fallback) for a moment — a visible flash of the
+          // wrong color before the (also correct, but 1150ms-debounced) MutationObserver retint
+          // caught up.
+          document.documentElement.setAttribute('data-colorway', picked);
+          DynamicColorway.setEnabled(false);
+        }
+        AppStore.set({ settings: { ...AppStore.get('settings'), colorway: picked } });
+        await Bridge.call('settings.setColorway', { colorway: picked });
       };
     });
 

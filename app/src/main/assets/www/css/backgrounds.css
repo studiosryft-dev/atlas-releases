@@ -101,3 +101,10 @@
 .colorway-swatch[data-swatch="sunset"] { background: linear-gradient(135deg, #d4256f, #cc7a32); }
 .colorway-swatch[data-swatch="lagoon"] { background: linear-gradient(135deg, #0038c2, #00a690); }
 .colorway-swatch[data-swatch="cosmic"] { background: linear-gradient(135deg, #4d00c2, #c200a0); }
+/* "Dynamic" — a slowly rotating rainbow conic gradient rather than a fixed hue, the one swatch
+   that's actually animated, to visually signal at a glance that this option isn't a static tint
+   like the other seven. */
+.colorway-swatch[data-swatch="dynamic"] {
+  background: conic-gradient(from 0deg, #ff10f0, #7000ff, #00d4ff, #00e0a0, #ffcc00, #ff10f0);
+  animation: spin 7s linear infinite;
+}

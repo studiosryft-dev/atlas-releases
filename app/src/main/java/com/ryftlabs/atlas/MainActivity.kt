@@ -93,14 +93,21 @@ class MainActivity : ComponentActivity() {
             settings.builtInZoomControls = false
             // Android's autofill framework (password managers like Bitwarden) inspects the
             // WebView's reported virtual view structure for anything that looks like a login
-            // form — this app has no login form inside the WebView content (auth screens use
-            // plain text/username fields, nothing password-shaped), but simply having any
-            // <input> element plus a focus change (e.g. a search field losing focus when an
-            // indexed page opens over it) was enough to trip the "save to password manager"
-            // heuristic. Opting the whole WebView out is the standard fix for this exact
-            // false-positive-prompt behavior.
+            // form — and this app genuinely has real <input type="password"> fields in it
+            // (auth.js's login/signup screens). Since this whole app is a single-page WebView
+            // that never does a real page navigation, Android's "was this form submitted" save-
+            // prompt heuristic (normally keyed off navigation/URL changes) has nothing reliable
+            // to key off of here — any later DOM change or focus shift can get misread as a
+            // completed submission, which is why the prompt could fire at an arbitrary later
+            // point, on an unrelated screen, seemingly at random.
+            // IMPORTANT_FOR_AUTOFILL_NO alone only marks this WebView container View as
+            // unimportant — it does NOT reliably exclude the *virtual* child structure the
+            // WebView itself reports for its page content (the actual input elements), which is
+            // exactly why that alone still let the prompt through sometimes.
+            // _NO_EXCLUDE_DESCENDANTS additionally excludes that whole virtual subtree, which is
+            // the real fix — nothing inside this WebView is ever offered to autofill again.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
             }
         }
         setContentView(webView)

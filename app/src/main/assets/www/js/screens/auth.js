@@ -4,17 +4,101 @@
  *  app, same trust boundary a native SessionManager would have). */
 const KEYSTONE_BASE_URL = 'https://ryft-keystone.onrender.com/';
 const SUPABASE_URL = 'https://vrdujtsvdmzemtosddmv.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'REPLACE_WITH_SB_PUBLISHABLE_KEY';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_l_vA8foH5FvQ8N6rVdJl7Q_06sGg56V';
 
 const Auth = (() => {
   const root = document.getElementById('auth-root');
 
+  /** Session persistence — per explicit requirement, the ONLY thing that should ever sign a user
+   *  out is pressing Sign Out. Supabase access tokens are short-lived (~1hr) by design, so just
+   *  storing access_token (the old behavior) meant every idle period or relaunch past that
+   *  window hit a 401 and force-signed-out — that read as "getting randomly signed out" even
+   *  though nothing was actually wrong with the account. Storing the refresh_token too and
+   *  running it through refreshSession() on the first 401 (see api() below) means an expired
+   *  access token is a non-event: silently refreshed and retried, invisible to the user. Only a
+   *  refresh_token that's ALSO dead (revoked, or Supabase's reuse-detection tripped) still
+   *  produces a real sign-out — which is the one case where re-authenticating is actually
+   *  unavoidable, not a bug. */
   function getToken() { return localStorage.getItem('atlas_token'); }
-  function setSession(token) { localStorage.setItem('atlas_token', token); }
+  function getRefreshToken() { return localStorage.getItem('atlas_refresh_token'); }
+  function setSession(tokenResp) {
+    localStorage.setItem('atlas_token', tokenResp.access_token);
+    if (tokenResp.refresh_token) localStorage.setItem('atlas_refresh_token', tokenResp.refresh_token);
+  }
   function clearSession() {
     localStorage.removeItem('atlas_token');
+    localStorage.removeItem('atlas_refresh_token');
     localStorage.removeItem('atlas_account_cache');
     localStorage.removeItem('atlas_access_cache');
+  }
+
+  /** De-duped so several requests hitting a stale access token at once (e.g. a batch of parallel
+   *  api() calls right after a long idle period) trigger exactly one refresh, not one each. */
+  let refreshInFlight = null;
+  async function refreshSession() {
+    const rt = getRefreshToken();
+    if (!rt) throw new Error('No refresh token.');
+    if (!refreshInFlight) {
+      refreshInFlight = supabaseAuth('token?grant_type=refresh_token', { refresh_token: rt })
+        .then((resp) => { setSession(resp); return resp; })
+        .finally(() => { refreshInFlight = null; });
+    }
+    return refreshInFlight;
+  }
+
+  /** Directional slide-transition mount, same recipe as js/router.js's page transitions but
+   *  scoped to #auth-root: each render*() call gets its own .auth-slide pane; the previous pane
+   *  slides/fades out behind it instead of the whole screen just snapping to new innerHTML.
+   *  direction: 1 = incoming slides in from the right (moving "forward" — login->signup,
+   *  signup->license key), -1 = from the left ("back" — signup->login, sign out), 0 = no slide
+   *  (first paint, or a same-screen refresh where a snap is correct, e.g. renderRevoked). */
+  const SLIDE_MS = 320;
+  let currentSlideEl = null;
+  function mountSlide(html, direction = 0) {
+    // Any render*() call means an auth screen should be on screen — normalize away whatever
+    // enterShell()'s exit animation left behind (a lingering transform/opacity/hidden state) and
+    // make sure the shell is tucked away behind it, regardless of which state we're arriving from
+    // (fresh launch, sign-out, a revoked-account bounce back to login, etc).
+    root.hidden = false;
+    root.style.cssText = '';
+    document.getElementById('shell-root').hidden = true;
+
+    const outgoing = currentSlideEl;
+    const el = document.createElement('div');
+    el.className = 'auth-slide';
+    el.innerHTML = html;
+    if (direction !== 0) el.style.transform = `translateX(${direction * 100}%)`;
+    root.appendChild(el);
+
+    if (direction !== 0) {
+      requestAnimationFrame(() => {
+        el.style.transition = `transform ${SLIDE_MS}ms cubic-bezier(0.22,1,0.36,1)`;
+        el.style.transform = 'translateX(0)';
+        if (outgoing) {
+          outgoing.style.transition = `transform ${SLIDE_MS}ms cubic-bezier(0.22,1,0.36,1), opacity ${SLIDE_MS}ms`;
+          outgoing.style.transform = `translateX(${-direction * 60}%)`;
+          outgoing.style.opacity = '0';
+        }
+      });
+      setTimeout(() => outgoing?.remove(), SLIDE_MS + 30);
+    } else {
+      outgoing?.remove();
+    }
+
+    currentSlideEl = el;
+    return el;
+  }
+
+  /** Persistent escape hatch on every keystone screen — never lets the user feel "stuck" (mid
+   *  signup, or holding a session but blocked before redeeming a license key) with no way back
+   *  except wiping app data. Wired against `el` (the freshly-mounted slide), not the document, so
+   *  it can never accidentally bind to a pane that's mid-way through animating out. */
+  function signOutBtnHtml() {
+    return `<button class="auth-signout-btn" type="button">${Icons.logout(15)}<span>Sign Out</span></button>`;
+  }
+  function wireSignOut(el) {
+    const btn = el.querySelector('.auth-signout-btn');
+    if (btn) btn.onclick = logout;
   }
 
   function cacheAccount(account) { localStorage.setItem('atlas_account_cache', JSON.stringify(account)); }
@@ -33,7 +117,7 @@ const Auth = (() => {
     return id;
   }
 
-  async function api(path, options = {}) {
+  async function api(path, options = {}, _retriedAfterRefresh = false) {
     const token = getToken();
     let res;
     try {
@@ -52,6 +136,17 @@ const Auth = (() => {
       const e = new Error('Network error — check your connection.');
       e.isNetworkError = true;
       throw e;
+    }
+    // A 401 here almost always just means the access token expired — try one silent
+    // refresh+retry before treating it as a real auth failure. Guarded by _retriedAfterRefresh
+    // so a refresh token that's genuinely dead still surfaces as a normal 401 instead of looping.
+    if (res.status === 401 && !_retriedAfterRefresh && getRefreshToken()) {
+      try {
+        await refreshSession();
+        return api(path, options, true);
+      } catch (refreshErr) {
+        // Refresh itself failed — fall through, this really is a dead session.
+      }
     }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -109,12 +204,12 @@ const Auth = (() => {
    *  wake) with #auth-root left completely empty the whole time — nothing was slow to compute,
    *  nothing was ever shown while waiting. This guarantees real UI paints immediately. */
   function renderLoading() {
-    root.innerHTML = `
+    mountSlide(`
       <div class="auth-screen" style="align-items:center; justify-content:center;">
         <div class="display" style="font-size:28px; margin-bottom:18px;">Atlas</div>
         <div class="loading-spinner"></div>
       </div>
-    `;
+    `, 0);
   }
 
   /** Password show/hide eye toggle — morphs eye-with-slash (hidden, the default) <-> plain eye
@@ -159,9 +254,10 @@ const Auth = (() => {
     }
   }
 
-  function renderLogin() {
-    root.innerHTML = `
+  function renderLogin(direction = -1) {
+    const el = mountSlide(`
       <div class="auth-screen">
+        ${signOutBtnHtml()}
         <h1 class="display auth-title">Sign in with Ryft Keystone</h1>
         <p class="auth-sub">Your Ryft Keystone account unlocks Atlas and every future Ryft app.</p>
         <div class="glass glass--strong auth-card">
@@ -172,18 +268,19 @@ const Auth = (() => {
         </div>
         <button class="btn-glass" id="go-signup" style="margin-top:16px;">Don't have an account? Sign up</button>
       </div>
-    `;
+    `, direction);
+    wireSignOut(el);
     wirePasswordToggle('login-password');
-    document.getElementById('go-signup').onclick = renderSignup;
-    document.getElementById('login-submit').onclick = async (e) => {
-      const email = document.getElementById('login-email').value.trim();
-      const password = document.getElementById('login-password').value;
-      const errEl = document.getElementById('login-error');
+    el.querySelector('#go-signup').onclick = () => renderSignup(1);
+    el.querySelector('#login-submit').onclick = async (e) => {
+      const email = el.querySelector('#login-email').value.trim();
+      const password = el.querySelector('#login-password').value;
+      const errEl = el.querySelector('#login-error');
       errEl.hidden = true;
       await submitWithSpinner(e.currentTarget, async () => {
         try {
           const tokenResp = await supabaseAuth('token?grant_type=password', { email, password });
-          setSession(tokenResp.access_token);
+          setSession(tokenResp);
           api('account/login-ping', { method: 'POST', body: JSON.stringify({ deviceId: deviceId() }) }).catch(() => {});
           const profile = await api('account/me');
           await proceedPastAuth(profile);
@@ -194,9 +291,10 @@ const Auth = (() => {
     };
   }
 
-  function renderSignup() {
-    root.innerHTML = `
+  function renderSignup(direction = 1) {
+    const el = mountSlide(`
       <div class="auth-screen">
+        ${signOutBtnHtml()}
         <h1 class="display auth-title">Create your Ryft Keystone account</h1>
         <p class="auth-sub">One account for Atlas and every Ryft app to come.</p>
         <div class="glass glass--strong auth-card">
@@ -208,14 +306,15 @@ const Auth = (() => {
         </div>
         <button class="btn-glass" id="go-login" style="margin-top:16px;">Already have an account? Sign in</button>
       </div>
-    `;
+    `, direction);
+    wireSignOut(el);
     wirePasswordToggle('su-password');
-    document.getElementById('go-login').onclick = renderLogin;
-    document.getElementById('su-submit').onclick = async (e) => {
-      const username = document.getElementById('su-username').value.trim();
-      const email = document.getElementById('su-email').value.trim();
-      const password = document.getElementById('su-password').value;
-      const errEl = document.getElementById('su-error');
+    el.querySelector('#go-login').onclick = () => renderLogin(-1);
+    el.querySelector('#su-submit').onclick = async (e) => {
+      const username = el.querySelector('#su-username').value.trim();
+      const email = el.querySelector('#su-email').value.trim();
+      const password = el.querySelector('#su-password').value;
+      const errEl = el.querySelector('#su-error');
       errEl.hidden = true;
       await submitWithSpinner(e.currentTarget, async () => {
         try {
@@ -225,10 +324,10 @@ const Auth = (() => {
             // client-side until they confirm and come back to sign in.
             errEl.textContent = 'Check your email to confirm your account, then sign in.';
             errEl.hidden = false;
-            setTimeout(renderLogin, 2200);
+            setTimeout(() => renderLogin(-1), 2200);
             return;
           }
-          setSession(body.access_token);
+          setSession(body);
           if (username) {
             // Best-effort: a taken/invalid username shouldn't block getting into the app —
             // the Account page's Rename flow can fix it later.
@@ -244,9 +343,10 @@ const Auth = (() => {
     };
   }
 
-  function renderLicenseKey() {
-    root.innerHTML = `
+  function renderLicenseKey(direction = 1) {
+    const el = mountSlide(`
       <div class="auth-screen">
+        ${signOutBtnHtml()}
         <h1 class="display auth-title">Enter your License Key</h1>
         <p class="auth-sub">Atlas is gated behind a license key (RYFT-XXXX-XXXX-XXXX-XXXX). Enter yours to continue.</p>
         <div class="glass glass--strong auth-card">
@@ -254,11 +354,16 @@ const Auth = (() => {
           <div class="auth-error" id="lk-error" hidden></div>
           <button class="btn-primary" id="lk-submit" style="width:100%; margin-top:14px;">Unlock Atlas</button>
         </div>
+        <button class="btn-glass" id="lk-refresh" style="margin-top:16px; display:flex; align-items:center; justify-content:center; gap:8px;">
+          <span class="lk-refresh-icon" id="lk-refresh-icon">${Icons.refresh(16)}</span>
+          <span>Already redeemed a key elsewhere? Check again</span>
+        </button>
       </div>
-    `;
-    document.getElementById('lk-submit').onclick = async (e) => {
-      const key = document.getElementById('lk-key').value.trim().toUpperCase();
-      const errEl = document.getElementById('lk-error');
+    `, direction);
+    wireSignOut(el);
+    el.querySelector('#lk-submit').onclick = async (e) => {
+      const key = el.querySelector('#lk-key').value.trim().toUpperCase();
+      const errEl = el.querySelector('#lk-error');
       errEl.hidden = true;
       await submitWithSpinner(e.currentTarget, async () => {
         try {
@@ -275,6 +380,31 @@ const Auth = (() => {
         }
       });
     };
+    // Covers redemption that happened out-of-band — a key redeemed on another device, or applied
+    // to the account directly (e.g. by support/admin) — without making the user re-enter a code
+    // they never actually typed here in the first place.
+    el.querySelector('#lk-refresh').onclick = async (e) => {
+      const btn = e.currentTarget;
+      const icon = el.querySelector('#lk-refresh-icon');
+      const errEl = el.querySelector('#lk-error');
+      errEl.hidden = true;
+      btn.disabled = true;
+      icon.classList.add('is-spinning');
+      try {
+        if (await hasAtlasAccess()) {
+          localStorage.setItem('atlas_access_cache', '1');
+          enterShell();
+          return;
+        }
+        errEl.textContent = "Still no key found for this account.";
+        errEl.hidden = false;
+      } catch (err) {
+        errEl.textContent = err.message; errEl.hidden = false;
+      } finally {
+        btn.disabled = false;
+        icon.classList.remove('is-spinning');
+      }
+    };
   }
 
   async function proceedPastAuth(profile) {
@@ -285,13 +415,28 @@ const Auth = (() => {
       enterShell();
     } else {
       localStorage.removeItem('atlas_access_cache');
-      renderLicenseKey();
+      renderLicenseKey(1);
     }
   }
 
+  /** The final step of the flow — keystone screening module smoothly animates up and out of the
+   *  way, revealing the unlocked shell underneath, rather than the old instant root.hidden snap. */
   function enterShell() {
-    root.hidden = true;
-    document.getElementById('shell-root').hidden = false;
+    const shell = document.getElementById('shell-root');
+    shell.hidden = false;
+    shell.style.opacity = '0';
+    requestAnimationFrame(() => {
+      root.style.transition = `transform 420ms cubic-bezier(0.22,1,0.36,1), opacity 420ms`;
+      root.style.transform = 'translateY(-100%)';
+      root.style.opacity = '0';
+      shell.style.transition = `opacity 380ms ease-out 140ms`;
+      shell.style.opacity = '1';
+    });
+    setTimeout(() => {
+      root.hidden = true;
+      root.style.cssText = '';
+      shell.style.cssText = '';
+    }, 440);
     AppStore.set({ authed: true });
     document.dispatchEvent(new CustomEvent('atlas:authed'));
   }
@@ -301,23 +446,19 @@ const Auth = (() => {
    *  backend rather than a guessed-at message, since that's the actual source of truth for
    *  *why* ("Account is suspended" etc., from ryft-keystone's requireAuth middleware). */
   function renderRevoked(reasonText) {
-    document.getElementById('shell-root').hidden = true;
-    root.hidden = false;
-    root.innerHTML = `
+    const el = mountSlide(`
       <div class="auth-screen" style="align-items:center; justify-content:center; text-align:center;">
+        ${signOutBtnHtml()}
         <div class="display" style="font-size:24px; margin-bottom:10px;">Your license has been ${escapeHtml(extractStatusWord(reasonText))}</div>
         <p class="auth-sub" style="margin-bottom:20px;">This device can't access Atlas until this is resolved. If you believe this is a mistake, contact support.</p>
         <div class="glass glass--strong auth-card" style="text-align:left;">
           <div style="font-family:var(--font-mono, monospace); font-size:12px; color:var(--ink-dim); white-space:pre-wrap; word-break:break-word;">${escapeHtml(lastRevokedRaw || reasonText || '')}</div>
         </div>
-        <div style="display:flex; gap:10px; margin-top:18px; width:100%; max-width:340px;">
-          <button class="btn-glass glass" id="revoked-refresh" style="flex:1;">Refresh</button>
-          <button class="btn-glass glass" id="revoked-signout" style="flex:1; color:var(--danger);">Sign Out</button>
-        </div>
+        <button class="btn-glass glass" id="revoked-refresh" style="width:100%; max-width:340px; margin-top:18px;">Refresh</button>
       </div>
-    `;
-    document.getElementById('revoked-refresh').onclick = () => checkSessionInBackground();
-    document.getElementById('revoked-signout').onclick = logout;
+    `, 0);
+    wireSignOut(el);
+    el.querySelector('#revoked-refresh').onclick = () => checkSessionInBackground();
   }
 
   /** Backend sends "Account is suspended" for a 403 — pull just the status word out so the
@@ -361,9 +502,7 @@ const Auth = (() => {
       } else if (e.status === 401) {
         clearSession();
         AppStore.set({ authed: false, account: null });
-        document.getElementById('shell-root').hidden = true;
-        root.hidden = false;
-        renderLogin();
+        renderLogin(0);
       }
       // any other status (5xx etc.) — also transient from the app's point of view, ignore.
     } finally {
@@ -379,7 +518,7 @@ const Auth = (() => {
 
   async function tryResumeSession() {
     const token = getToken();
-    if (!token) { renderLogin(); return; }
+    if (!token) { renderLogin(0); return; }
 
     const cached = getCachedAccount();
     if (cached && localStorage.getItem('atlas_access_cache') === '1') {
@@ -422,10 +561,8 @@ const Auth = (() => {
   function logout() {
     const token = getToken();
     clearSession();
-    document.getElementById('shell-root').hidden = true;
-    root.hidden = false;
     AppStore.set({ authed: false, account: null });
-    renderLogin();
+    renderLogin(-1);
     if (token) {
       // Best-effort server-side invalidation — local sign-out already happened above regardless.
       supabaseAuth('logout', {}, { Authorization: `Bearer ${token}` }).catch(() => {});

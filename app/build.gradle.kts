@@ -13,7 +13,7 @@ android {
         applicationId = "com.ryftlabs.atlas"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0"
 
         // Queried directly for update checks (see com.ryftlabs.atlas.update.UpdateChecker) rather
@@ -22,7 +22,7 @@ android {
         // (protected by RLS, not secrecy; see supabase-migrations/014_app_releases.sql's
         // read-only policy).
         buildConfigField("String", "SUPABASE_URL", "\"https://vrdujtsvdmzemtosddmv.supabase.co\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"REPLACE_WITH_SB_PUBLISHABLE_KEY\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"sb_publishable_l_vA8foH5FvQ8N6rVdJl7Q_06sGg56V\"")
     }
 
     buildTypes {

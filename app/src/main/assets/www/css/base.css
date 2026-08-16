@@ -31,6 +31,7 @@
 :root[data-perf-mode="1"] {
   --glass-blur: blur(2px);
   --glass-blur-strong: blur(2px);
+  --modal-blur: blur(2px);
 }
 /* The animated wave background's own JS halves its update rate under perf mode (see
    WavesBackground.setPerfMode in wavesBg.js) — that's the other big continuous rendering cost,

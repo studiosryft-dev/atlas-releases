@@ -1,12 +1,48 @@
+/* #auth-root itself is position:absolute;inset:0 (layout.css) — clip here so outgoing/incoming
+   .auth-slide panes sliding to ±100% don't spill past the screen edge during the transition. */
+#auth-root { overflow: hidden; }
+
+/* Each render*() call mounts its screen into its own .auth-slide pane (auth.js's mountSlide),
+   stacked absolutely so the outgoing pane can slide/fade out while the incoming one slides in —
+   same directional-slide recipe as js/router.js's page transitions, scoped to the auth module. */
+.auth-slide {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
 .auth-screen {
   position: relative;
-  z-index: 2;
   height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: 28px;
 }
+
+/* Persistent top-right escape hatch on every keystone screen — per explicit feedback that a user
+   should never be "stuck" on an auth screen (e.g. mid-signup, or holding a session but blocked
+   before a license key) with no way back except an app-data wipe. */
+.auth-signout-btn {
+  position: absolute;
+  top: calc(var(--safe-top) + 18px);
+  right: 18px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px var(--glass-edge-soft);
+  color: var(--ink-mute);
+  font-size: 12px;
+  font-weight: 600;
+  transition: color var(--dur-fast), background var(--dur-fast), transform var(--dur-fast) var(--ease-swift);
+}
+.auth-signout-btn:active { transform: scale(0.94); }
+.auth-signout-btn svg { color: color-mix(in srgb, var(--bg-1) 55%, white); }
 .auth-title { font-size: 26px; margin-bottom: 8px; }
 .loading-spinner {
   width: 32px;
@@ -80,6 +116,10 @@
    label so pressing the button visibly *does something* instead of appearing to do nothing until
    the network call resolves. */
 .btn-primary.is-loading { pointer-events: none; opacity: 0.85; }
+
+.lk-refresh-icon { display: flex; }
+.lk-refresh-icon.is-spinning { animation: spin 700ms linear infinite; }
+#lk-refresh:disabled { pointer-events: none; opacity: 0.7; }
 .btn-spinner {
   width: 17px;
   height: 17px;

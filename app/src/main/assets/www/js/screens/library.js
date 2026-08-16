@@ -82,23 +82,9 @@ const LibraryScreen = (() => {
 
     if (filter === 'trash') Bridge.call('library.trashList').then((list) => AppStore.set({ libraryTrash: list }));
 
-    refreshMiniPlayerSpacing();
     renderActions();
     renderList();
   }
-
-  /** Gives the track-list widget more bottom clearance whenever the mini player is showing (see
-   *  .embedded-scroll-frame--widget.is-mini-player-visible in components.css) — same "is there
-   *  a track loaded" condition app.js's renderMiniPlayer itself uses. Called on render and kept
-   *  live via the playback.state push so starting/stopping playback while already on the
-   *  Library tab animates the spacing immediately rather than only on the next visit. */
-  function refreshMiniPlayerSpacing() {
-    const frame = document.querySelector('.embedded-scroll-frame--widget');
-    if (!frame) return;
-    const state = AppStore.get('playbackState');
-    frame.classList.toggle('is-mini-player-visible', !!(state && state.title));
-  }
-  Bridge.on('playback.state', () => { if (Router.current === 'library') refreshMiniPlayerSpacing(); });
 
   /** The row directly under the filter chips — Play/Shuffle normally, Recover All/Delete All in
    *  Trash. The buttons themselves are persistent DOM nodes, created once in render() and never

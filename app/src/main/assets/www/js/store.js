@@ -23,5 +23,5 @@ const AppStore = new Store({
   notifications: [],
   playbackState: { isPlaying: false, title: null, artist: null },
   queueState: { queue: [], history: [], currentIndex: -1 },
-  settings: { wifiOnly: false, audioQuality: 'MEDIUM', themeMode: 'DARK', colorway: 'pulse' },
+  settings: { wifiOnly: false, audioQuality: 'HIGH', themeMode: 'DARK', colorway: 'pulse' },
 });

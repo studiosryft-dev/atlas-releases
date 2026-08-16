@@ -243,7 +243,10 @@ const WavesBackground = (() => {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-colorway', 'data-appearance'] });
   }
 
-  return { start, setEnabled, setSpeed, setPerfMode, mountInstance };
+  // Exposed for the Dynamic colorway (js/dynamicColorway.js) — it sets --bg-1/2/3/base directly
+  // via inline style rather than the data-colorway attribute the MutationObserver above watches,
+  // so nothing would otherwise re-tint the wave layers when a new track's palette lands.
+  return { start, setEnabled, setSpeed, setPerfMode, mountInstance, retint: retintAll };
 })();
 
 WavesBackground.start();

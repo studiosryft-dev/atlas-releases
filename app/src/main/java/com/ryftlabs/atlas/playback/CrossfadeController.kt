@@ -65,6 +65,19 @@ class CrossfadeController(
     private var lastTransitionAtMs = 0L
     private val TRANSITION_COOLDOWN_MS = 1500L
 
+    // The actual root cause of "track 2 only plays for the crossfade duration, then jumps
+    // straight to track 3": primary is deliberately never paused during a crossfade (it has to
+    // keep actually playing for its own fade-OUT to be audible), so its position keeps advancing
+    // in real time throughout the whole fade window. maybeStartCrossfade's "remaining time"
+    // estimate only has to be slightly optimistic (or the track slightly short) for primary to
+    // hit track 1's own natural end *during* the fade and auto-advance itself onto track 2 —
+    // entirely independently of, and before, this class's own end-of-fade seekToNextMediaItem()
+    // call. That call used to fire unconditionally, so when primary had already self-advanced it
+    // ended up seeking from track 2 to track 3 instead of from track 1 to track 2 — landing on
+    // track 3 at full volume the instant the fade loop ended, while what the listener actually
+    // heard of track 2 was only ever secondary's copy, cut short right as the fade finished.
+    private var primaryAutoAdvancedDuringFade = false
+
     fun start() {
         settingsRepository.crossfadeSeconds
             .onEach { crossfadeSeconds = it }
@@ -77,6 +90,9 @@ class CrossfadeController(
         primary.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 lastTransitionAtMs = System.currentTimeMillis()
+                if (crossfadeJob?.isActive == true && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                    primaryAutoAdvancedDuringFade = true
+                }
             }
         })
 
@@ -112,11 +128,12 @@ class CrossfadeController(
         val nextItem = primary.getMediaItemAt(nextIndex)
         lastCrossfadedItemIndex = nextIndex
         crossfadeJob = scope.launch(Dispatchers.Main.immediate) {
-            runCrossfade(nextItem)
+            runCrossfade(nextIndex, nextItem)
         }
     }
 
-    private suspend fun runCrossfade(nextItem: MediaItem) {
+    private suspend fun runCrossfade(nextIndex: Int, nextItem: MediaItem) {
+        primaryAutoAdvancedDuringFade = false
         try {
             val sec = (ExoPlayer.Builder(context).build()).also { secondary = it }
             sec.setMediaItem(nextItem)
@@ -139,10 +156,23 @@ class CrossfadeController(
                 if (!primary.isPlaying) break
             }
 
-            // Primary is (or should be) silent now — safe to restart it onto the next item
-            // inaudibly, matching where the secondary already is.
+            // Primary is (or should be) silent now — safe to cut over onto the next item
+            // inaudibly. Seeks to secondary's OWN current position, not 0 — secondary has been
+            // genuinely playing this track for the whole fade window, so restarting primary from
+            // the beginning here would audibly RESTART the song the instant control passes back
+            // to it (the actual bug: "the crossfade transition finishes, then it restarts the
+            // next song" — every previous version of this always seeked to position 0 no matter
+            // what, throwing away however many seconds secondary had already played). Reading
+            // secondary's position now, right before secondary gets torn down below, keeps the
+            // handoff at the same timeline position on both sides — genuinely seamless, not just
+            // volume-seamless. Skipped entirely if primary already auto-advanced onto this same
+            // item on its own mid-fade (see primaryAutoAdvancedDuringFade's doc comment) — it's
+            // already at its own correct, self-consistent position in that case, and forcing
+            // another seek would only reintroduce a jump.
             primary.volume = 0f
-            primary.seekToNextMediaItem()
+            if (!primaryAutoAdvancedDuringFade) {
+                primary.seekTo(nextIndex, sec.currentPosition)
+            }
             primary.volume = 1f
             lastTransitionAtMs = System.currentTimeMillis()
         } catch (e: Exception) {

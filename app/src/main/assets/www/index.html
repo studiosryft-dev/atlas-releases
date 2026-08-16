@@ -33,15 +33,25 @@
           </button>
         </div>
       </div>
-      <div class="header-stats">
-        <button class="header-nav-btn" id="btn-discover" data-icon="discover">
-          <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.2-3.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <span>Discover</span>
-        </button>
-        <button class="header-nav-btn" id="btn-queue" data-icon="queue">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h10M4 18h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          <span>Queue</span>
-        </button>
+      <div class="header-stats-slot">
+        <div class="header-stats is-active" id="header-stats">
+          <button class="header-nav-btn" id="btn-discover" data-icon="discover">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.2-3.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>Discover</span>
+          </button>
+          <button class="header-nav-btn" id="btn-queue" data-icon="queue">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h10M4 18h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>Queue</span>
+          </button>
+        </div>
+        <div class="header-dl-progress" id="header-dl-progress">
+          <div class="hdp-title" id="hdp-title">Downloading:</div>
+          <div class="hdp-bar-row">
+            <div class="hdp-bar"><div class="hdp-bar__fill" id="hdp-bar-fill"></div></div>
+            <span class="hdp-pct" id="hdp-pct">0%</span>
+          </div>
+          <div class="hdp-count-wrap" id="hdp-count-wrap"><div class="hdp-count-inner"><span class="hdp-count" id="hdp-count"></span></div></div>
+        </div>
       </div>
     </header>
 
@@ -65,11 +75,14 @@
 <script src="js/overlay.js"></script>
 <script src="js/glassDropdown.js"></script>
 <script src="js/albumColor.js"></script>
+<script src="js/dynamicColorway.js"></script>
 <script src="js/updateFlow.js"></script>
 <script src="js/store.js"></script>
 <script src="js/router.js"></script>
 <script src="js/notifications.js"></script>
 <script src="js/icons.js"></script>
+<script src="js/onboarding.js"></script>
+<script src="js/downloadProgress.js"></script>
 <script src="js/screens/auth.js"></script>
 <script src="js/screens/library.js"></script>
 <script src="js/screens/playlists.js"></script>

@@ -1,7 +1,10 @@
 package com.ryftlabs.atlas.playback
 
 import android.media.audiofx.Visualizer
+import android.util.Log
 import kotlin.math.sqrt
+
+private const val TAG = "VisualizerController"
 
 /**
  * Real audio-reactive data for Now Playing's visualizer — FFT magnitude captured from the
@@ -46,7 +49,10 @@ class VisualizerController {
     private fun startInternal() {
         stopInternal()
         val sid = sessionId
-        if (sid <= 0 || onData == null) return
+        if (sid <= 0 || onData == null) {
+            Log.w(TAG, "startInternal() skipped — sessionId=$sid onData=${onData != null} (waiting for a valid audio session)")
+            return
+        }
         runCatching {
             visualizer = Visualizer(sid).apply {
                 val range = Visualizer.getCaptureSizeRange()
@@ -68,6 +74,13 @@ class VisualizerController {
                 )
                 enabled = true
             }
+            Log.i(TAG, "Visualizer attached: session=$sid captureSize=${visualizer?.captureSize}")
+        }.onFailure { e ->
+            // Previously swallowed with zero trace — this is very likely the actual explanation
+            // for "the visualizer just never animates": if Visualizer construction throws (some
+            // OEM audio stacks restrict it, or it's attached before the session is truly ready
+            // despite the sid>0 check above), nothing before this ever recorded that it happened.
+            Log.e(TAG, "Visualizer construction failed for session=$sid — bars will stay idle.", e)
         }
     }
 

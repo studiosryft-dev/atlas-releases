@@ -40,6 +40,12 @@
      Optimization (base.css) cuts it further on top of this when enabled. */
   --glass-blur: blur(9px);
   --glass-blur-strong: blur(9px);
+  /* Full-screen modal/action-sheet/bottom-sheet scrims (components.css) — a real blur, not just
+     a token amount, since the whole point is making the page underneath clearly unreadable while
+     something the user must read/interact with is up. Discounted under Phone Heat Optimization
+     (base.css) same as the two above, since a full-viewport blur is if anything more expensive
+     than a small glass panel's. */
+  --modal-blur: blur(14px);
   /* Was a distinct larger radius (26px) for "big panel" surfaces — unified to match
      --glass-radius-md (the bottom nav's own rounding, explicitly called out as the app's
      reference shape) per feedback that corner rounding read as inconsistent across the app
@@ -74,6 +80,11 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --header-height: 96px;
   --nav-height: 64px;
+  /* Mini player's own rendered height (40px artwork + 8px padding top/bottom, see app.js's
+     renderMiniPlayer) plus its "bottom" offset above the nav (18px, layout.css's #mini-player)
+     plus a little breathing room — the total vertical footprint native-tab scroll content needs
+     to clear so the mini player (when visible) never overlaps/hides the bottom of the page. */
+  --mini-player-clearance: 86px;
 
   /* ---- typography ---- */
   --font-display: 'Neue Haas Display', 'Inter', sans-serif;

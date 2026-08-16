@@ -46,6 +46,9 @@ interface PlaylistDao {
     @Query("UPDATE playlists SET name = :name WHERE id = :id")
     suspend fun rename(id: String, name: String)
 
+    @Query("UPDATE playlists SET playCount = playCount + 1 WHERE id = :id")
+    suspend fun incrementPlayCount(id: String)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun addTrack(crossRef: PlaylistTrackCrossRef)
 

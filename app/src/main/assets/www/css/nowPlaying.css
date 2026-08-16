@@ -2,16 +2,22 @@
    Now Playing + Lyrics — share one Indexed Page, sliding
    horizontally between the two panels inside .np-slider.
    ============================================================ */
-/* Registered as a typed <color> (same trick backgrounds.css uses for --bg-1/2/3) so setting it
-   via inline style — see js/albumColor.js + nowPlaying.js's applyBg — crossfades smoothly on a
-   track change instead of snapping, and everything below that reads it (seek bar, repeat
-   buttons) rides that same transition for free. */
+/* A pure alias to --bg-1 — the exact same custom property backgrounds.css's colorway system (and
+   Dynamic colorway's own live per-track palette, js/dynamicColorway.js) already drives — not an
+   independently-extracted album-art color. That used to be its own separate AlbumColor.extract()
+   pipeline, which per explicit feedback needed to "always match the selected colorway no matter
+   what" and "update to the current color whenever Now Playing opens (if set to Dynamic)" — both
+   of which --bg-1 already does correctly and immediately, for free, since it's the same live
+   value every other colorway-aware element in the app already reads. Registered as its own typed
+   <color> (rather than just using var(--bg-1) directly everywhere below) purely so this file
+   keeps its own semantic name and its own transition duration, tuned differently from
+   backgrounds.css's 1100ms wave crossfade. */
 @property --np-accent { syntax: '<color>'; inherits: true; initial-value: #8b5cf6; }
 .np-shell {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  --np-accent: #8b5cf6;
+  --np-accent: var(--bg-1);
   transition: --np-accent 700ms var(--ease-standard);
 }
 .np-bg {
@@ -161,7 +167,56 @@
   color: var(--ink-mute);
   font-variant-numeric: tabular-nums;
 }
-.np-quality { display: flex; align-items: center; gap: 5px; font-weight: 700; letter-spacing: 0.02em; }
+.np-quality-wrap { position: relative; }
+.np-quality {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: inherit;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border-radius: var(--glass-radius-sm);
+  transition: background var(--dur-fast), transform var(--dur-fast) var(--ease-swift);
+}
+.np-quality:active { transform: scale(0.94); background: rgba(255, 255, 255, 0.06); }
+.np-quality-icon { position: relative; width: 14px; height: 14px; display: inline-block; }
+
+/* Same glassmorphism-dropdown language as the 3-dot menu's .np-dropdown (fade+slide entrance via
+   the shared fadeSlideDown keyframe, an is-closing exit transition) but centered under its own
+   trigger instead of right-aligned, and sized up — bigger font/padding, per explicit feedback
+   that the equivalent 3-dot menu items read too small to comfortably tap for a "check the option
+   you want" picker rather than a one-off action list. */
+.np-quality-dropdown {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  min-width: 176px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: fadeSlideUp var(--dur-fast) var(--ease-standard);
+  transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+}
+.np-quality-dropdown.is-closing { opacity: 0; transform: translateX(-50%) translateY(8px); }
+.np-quality-dropdown__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: var(--glass-radius-sm);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  transition: background 120ms, color 120ms;
+}
+.np-quality-dropdown__item:active { background: rgba(255, 255, 255, 0.08); }
+.np-quality-dropdown__item.is-selected { color: var(--np-accent); background: color-mix(in srgb, var(--np-accent) 16%, transparent); }
 
 .np-transport {
   display: flex;
@@ -178,21 +233,25 @@
 .np-repeat-row {
   display: flex;
   justify-content: center;
-  align-items: center;
-  gap: 26px;
+  align-items: stretch;
+  gap: 10px;
   margin-bottom: 6px;
 }
 .np-repeat-btn {
+  flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
+  gap: 5px;
+  padding: 9px 4px;
+  border-radius: var(--glass-radius-sm);
   color: var(--ink-mute);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
   transition: color var(--dur-medium) var(--ease-standard), background var(--dur-medium) var(--ease-standard), transform var(--dur-fast) var(--ease-swift);
 }
-.np-repeat-btn:active { transform: scale(0.9); }
+.np-repeat-btn:active { transform: scale(0.95); background: rgba(255, 255, 255, 0.06); }
 /* Selected state fades in via a plain opacity/color transition (not a swap) — color itself
    rides --np-accent's own transition, so both the "which one's selected" change and an album-art
    color change animate smoothly regardless of which triggered the update. */

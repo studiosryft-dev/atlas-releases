@@ -42,13 +42,96 @@
   height: 32px;
   color: var(--ink-mute);
 }
+/* Both the Discover/Queue nav tiles and the download progress panel occupy this exact same
+   slot — a live download crossfades in over the nav tiles rather than growing the header, since
+   #global-header has a fixed --header-height and .glass (its own class) clips overflow. Both
+   children are absolutely positioned to the same rect and cross-faded via opacity/scale so
+   neither ever pushes the other during the transition. */
+.header-stats-slot {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
 #global-header .header-stats {
   display: flex;
   align-items: stretch;
   gap: 6px;
-  flex: 1;
-  min-height: 0;
 }
+.header-stats-slot > .header-stats,
+.header-stats-slot > .header-dl-progress {
+  position: absolute;
+  inset: 0;
+  transition: opacity var(--dur-medium) var(--ease-standard), transform var(--dur-medium) var(--ease-standard);
+}
+.header-stats-slot > :not(.is-active) {
+  opacity: 0;
+  transform: scale(0.97);
+  pointer-events: none;
+}
+/* Live download progress — occupies the exact same ~38px slot as the two nav tiles above (see
+   .header-stats-slot), so every line here is deliberately tight: small font, tight line-height,
+   1px gaps. Verified against #global-header's fixed --header-height with the download queue
+   preview harness rather than guessed — this is the largest layout that still clips cleanly. */
+.header-dl-progress {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+.hdp-title {
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hdp-bar-row { display: flex; align-items: center; gap: 8px; }
+.hdp-bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.hdp-bar__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--bg-1), color-mix(in srgb, var(--bg-1) 60%, white));
+  box-shadow: 0 0 6px -1px var(--bg-1);
+  transition: width 260ms var(--ease-standard);
+}
+.hdp-pct {
+  flex-shrink: 0;
+  min-width: 28px;
+  font-size: 9.5px;
+  line-height: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: color-mix(in srgb, var(--bg-1) 60%, white);
+}
+/* Only shown for a multi-item batch (a playlist import, or several tracks downloaded together) —
+   grid-rows 0fr->1fr is the same height-animation trick components.css's accordion uses, so this
+   line can animate in/out without a JS height measurement. */
+.hdp-count-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-medium) var(--ease-standard);
+}
+.hdp-count-wrap.is-open { grid-template-rows: 1fr; }
+.hdp-count-inner { overflow: hidden; min-height: 0; }
+.hdp-count {
+  display: block;
+  padding-top: 1px;
+  font-size: 8.5px;
+  line-height: 10px;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+
 .header-nav-btn {
   flex: 1;
   display: flex;
@@ -94,6 +177,19 @@
   padding: 12px 16px 16px;
   overflow-y: auto;
   height: 100%;
+  transition: padding-bottom var(--dur-slow) var(--ease-standard);
+}
+/* Extra bottom clearance for the mini player's own floating footprint (--mini-player-clearance,
+   tokens.css) — #page-container's own bottom inset only clears the bottom nav, not the mini
+   player that floats above it, so without this the last bit of any tab's content (an expanded
+   Settings accordion especially) sits underneath the mini player, invisible and unclickable,
+   whenever something's playing. Toggled by app.js's renderMiniPlayer on #page-container itself
+   (one source of truth for every native tab) rather than each screen reserving its own — Library
+   used to run its own separate copy of this exact mechanism scoped to its embedded-scroll widget
+   (.embedded-scroll-frame--widget.is-mini-player-visible, components.css), which after this was
+   added started double-stacking with it (both applying at once) rather than replacing it. */
+#page-container.is-mini-player-visible .page-slide {
+  padding-bottom: calc(16px + var(--mini-player-clearance));
 }
 .page-slide::-webkit-scrollbar { display: none; }
 
@@ -157,6 +253,27 @@
 }
 .nav-item { position: relative; z-index: 1; }
 
+/* ---------------- floating action button ---------------- */
+/* Positioned above the rightmost bottom-nav tile (Account) rather than centered — right-aligned
+   to roughly the same column the last nav item occupies, so it reads as anchored to that tab
+   instead of floating in generic screen-corner space. */
+.fab {
+  position: fixed;
+  right: 20px;
+  bottom: calc(var(--safe-bottom) + var(--nav-height) + 24px);
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 18;
+  color: var(--bg-1);
+  animation: fadeSlideUp var(--dur-medium) var(--ease-standard);
+  transition: transform var(--dur-fast) var(--ease-swift), box-shadow var(--dur-fast);
+}
+.fab:active { transform: scale(0.9); }
+
 /* ---------------- mini player ---------------- */
 #mini-player {
   position: absolute;
@@ -199,6 +316,32 @@
   transform: translateY(0);
   pointer-events: auto;
 }
+
+/* Swipe-down-to-dismiss drag state (app.js's attachIndexedPageSwipeDismiss toggles this for as
+   long as a real vertical drag is live). Two effects, both purely cosmetic/perf — no animation
+   timing changes:
+   1. Every .glass descendant (a page like Notification Center can have a dozen-plus individually
+      blurred cards/buttons on screen at once) drops its backdrop-filter for the duration of the
+      drag. Re-compositing that many blur regions every touchmove frame while the whole page is
+      also being transformed is what was actually showing up as fast flicker/stutter — a paint-
+      cost problem, not an animation one. The blur isn't really missed while the content itself is
+      sliding under a finger anyway.
+   2. A soft top feather — a mask-image fade, NOT a color overlay. An overlay painted a fixed
+      color (e.g. var(--deep)) on top of the page's real background, which only reads as a blend
+      when the colorway underneath happens to be close to that exact color; against anything else
+      (a red colorway, say) it's just a second, differently-colored hard edge — worse than the
+      cut line it was meant to soften. A mask instead makes the page's own top edge progressively
+      *transparent*, genuinely revealing whatever's actually behind it (the real header/shell),
+      which blends correctly regardless of colorway since nothing fake is being drawn. */
+.indexed-page.is-dragging .glass,
+.indexed-page.is-dragging.glass {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.indexed-page.is-dragging {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, black 70px, black 100%);
+  mask-image: linear-gradient(180deg, transparent 0, black 70px, black 100%);
+}
 .indexed-page__content {
   position: relative;
   z-index: 1;
@@ -212,3 +355,38 @@
   justify-content: space-between;
   margin-bottom: 16px;
 }
+
+/* ---------------- Playlist Detail header (js/screens/playlists.js) ---------------- */
+.pd-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.pd-title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pd-title-input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: var(--glass-radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1.5px var(--ice);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+}
+.pd-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+.pd-stats-dot { opacity: 0.6; }
